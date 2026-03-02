@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KMUTNB Wi-Fi Network - 3D Signal Quality Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { 
+    font-family: 'Segoe UI', Tahoma, sans-serif; 
+    background: #0a0a1a; 
+    color: #e0e0e0; 
+    overflow: hidden;
+  }
+  #container { width: 100vw; height: 100vh; position: relative; }
+  canvas { display: block; }
+  
+  /* Top bar */
+  #topbar {
+    position: absolute; top: 0; left: 0; right: 0;
+    background: linear-gradient(180deg, rgba(10,10,30,0.95) 0%, rgba(10,10,30,0.7) 100%);
+    padding: 12px 24px;
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 100;
+    border-bottom: 1px solid rgba(100,100,255,0.2);
+  }
+  #topbar h1 {
+    font-size: 18px; font-weight: 600;
+    background: linear-gradient(90deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  #topbar .subtitle { font-size: 11px; color: #888; margin-top: 2px; }
+  
+  /* Stats bar */
+  .stats-row {
+    display: flex; gap: 20px; align-items: center;
+  }
+  .stat-item {
+    text-align: center; padding: 4px 12px;
+    border: 1px solid rgba(100,100,255,0.15);
+    border-radius: 8px; background: rgba(30,30,60,0.5);
+  }
+  .stat-val { font-size: 16px; font-weight: 700; color: #60a5fa; }
+  .stat-label { font-size: 9px; color: #888; text-transform: uppercase; }
+  
+  /* Side panel */
+  #sidepanel {
+    position: absolute; top: 70px; right: 12px;
+    width: 320px; max-height: calc(100vh - 90px);
+    background: rgba(15,15,35,0.92);
+    border: 1px solid rgba(100,100,255,0.2);
+    border-radius: 12px; padding: 16px;
+    overflow-y: auto; z-index: 100;
+    backdrop-filter: blur(10px);
+  }
+  #sidepanel h3 {
+    font-size: 14px; margin-bottom: 10px;
+    color: #a78bfa; border-bottom: 1px solid rgba(100,100,255,0.2);
+    padding-bottom: 6px;
+  }
+  .building-card {
+    background: rgba(30,30,60,0.5);
+    border: 1px solid rgba(100,100,255,0.15);
+    border-radius: 8px; padding: 10px; margin-bottom: 8px;
+    cursor: pointer; transition: all 0.3s;
+  }
+  .building-card:hover, .building-card.active {
+    border-color: #60a5fa;
+    background: rgba(50,50,100,0.5);
+    transform: translateX(-4px);
+  }
+  .building-card .bname { font-size: 12px; font-weight: 600; color: #e0e0e0; }
+  .building-card .bname-en { font-size: 10px; color: #888; }
+  .building-card .bstats { 
+    display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap;
+  }
+  .building-card .bstat {
+    font-size: 10px; padding: 2px 6px; border-radius: 4px;
+    background: rgba(50,50,100,0.5);
+  }
+  .building-card .rssi-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 4px;
+    font-size: 10px; font-weight: 600;
+  }
+  
+  /* Floor detail panel */
+  #floorDetail {
+    position: absolute; top: 70px; left: 12px;
+    width: 340px; max-height: calc(100vh - 90px);
+    background: rgba(15,15,35,0.92);
+    border: 1px solid rgba(100,100,255,0.2);
+    border-radius: 12px; padding: 16px;
+    overflow-y: auto; z-index: 100;
+    backdrop-filter: blur(10px);
+    display: none;
+  }
+  #floorDetail h3 { 
+    font-size: 14px; color: #60a5fa; 
+    border-bottom: 1px solid rgba(100,100,255,0.2);
+    padding-bottom: 6px; margin-bottom: 10px;
+  }
+  .floor-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; margin-bottom: 4px;
+    border-radius: 6px; background: rgba(30,30,60,0.4);
+    border-left: 3px solid;
+    font-size: 11px;
+  }
+  .floor-row .fname { font-weight: 600; min-width: 40px; }
+  .floor-row .fstats { flex: 1; display: flex; gap: 6px; flex-wrap: wrap; }
+  .floor-row .fstat { color: #aaa; }
+  
+  /* AP tooltip */
+  #tooltip {
+    position: absolute; display: none;
+    background: rgba(10,10,30,0.95);
+    border: 1px solid rgba(100,100,255,0.4);
+    border-radius: 8px; padding: 10px 14px;
+    font-size: 11px; z-index: 200;
+    pointer-events: none; max-width: 280px;
+    backdrop-filter: blur(10px);
+  }
+  #tooltip .tt-name { font-weight: 600; color: #60a5fa; font-size: 13px; }
+  #tooltip .tt-row { margin-top: 3px; color: #bbb; }
+  
+  /* Legend */
+  #legend {
+    position: absolute; bottom: 12px; left: 12px;
+    background: rgba(15,15,35,0.9); border: 1px solid rgba(100,100,255,0.2);
+    border-radius: 8px; padding: 10px 14px; z-index: 100;
+  }
+  #legend h4 { font-size: 11px; color: #888; margin-bottom: 6px; }
+  .legend-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; font-size: 10px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 2px; }
+  
+  /* Controls */
+  #controls {
+    position: absolute; bottom: 12px; right: 12px;
+    display: flex; gap: 8px; z-index: 100;
+    flex-wrap: wrap; justify-content: flex-end; max-width: 500px;
+  }
+  .ctrl-btn {
+    background: rgba(30,30,60,0.8); border: 1px solid rgba(100,100,255,0.3);
+    color: #e0e0e0; padding: 8px 14px; border-radius: 8px;
+    cursor: pointer; font-size: 11px; transition: all 0.2s;
+    user-select: none;
+  }
+  .ctrl-btn:hover { background: rgba(60,60,120,0.8); border-color: #60a5fa; }
+  .ctrl-btn.active { background: rgba(60,100,200,0.5); border-color: #60a5fa; }
+  
+  /* Minimap */
+  #minimap {
+    position: absolute; bottom: 60px; left: 12px;
+    width: 160px; height: 120px;
+    background: rgba(15,15,35,0.9); border: 1px solid rgba(100,100,255,0.2);
+    border-radius: 8px; z-index: 100; overflow: hidden;
+  }
+  #minimap canvas { width: 100%; height: 100%; }
+  
+  /* Hour slider */
+  #hourControl {
+    position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+    background: rgba(15,15,35,0.9); border: 1px solid rgba(100,100,255,0.2);
+    border-radius: 8px; padding: 10px 20px; z-index: 100;
+    display: none; text-align: center;
+  }
+  #hourControl label { font-size: 11px; color: #888; }
+  #hourControl .hour-val { font-size: 20px; font-weight: 700; color: #60a5fa; }
+  #hourSlider { width: 300px; margin-top: 6px; accent-color: #60a5fa; }
+  
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(100,100,255,0.3); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div id="container">
+  <div id="topbar">
+    <div>
+      <h1>🏛️ KMUTNB Wi-Fi Signal Quality - 3D Campus View</h1>
+      <div class="subtitle">ICIT Data Insight & Analytics Challenge 2026 | ข้อมูลเดือน มกราคม 2569</div>
+    </div>
+    <div class="stats-row" id="globalStats"></div>
+  </div>
+  
+  <div id="sidepanel"></div>
+  <div id="floorDetail"></div>
+  <div id="tooltip"></div>
+  
+  <div id="legend">
+    <h4>📶 RSSI Signal Quality</h4>
+    <div class="legend-row"><div class="legend-dot" style="background:#00ff88"></div> Excellent (≥-50 dBm)</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#44cc44"></div> Very Good (-51~-60)</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#ffdd00"></div> Good (-61~-67)</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#ff9900"></div> Fair (-68~-70)</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#ff4444"></div> Weak (-71~-80)</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#cc0000"></div> Very Poor (<-80)</div>
+    <div style="margin-top:6px; border-top:1px solid rgba(100,100,255,0.2); padding-top:6px;">
+      <div class="legend-row"><div class="legend-dot" style="background:rgba(255,0,0,0.6); border-radius:50%;"></div> Pulsing = Dead Zone (>70% Weak)</div>
+      <div class="legend-row"><div class="legend-dot" style="background:rgba(255,200,0,0.4); border-radius:50%;"></div> Sphere size = User count</div>
+    </div>
+  </div>
+  
+  <div id="controls">
+    <button class="ctrl-btn" onclick="toggleView('signal')" id="btnSignal">📶 Signal View</button>
+    <button class="ctrl-btn" onclick="toggleView('users')" id="btnUsers">👥 User Density</button>
+    <button class="ctrl-btn" onclick="toggleView('data')" id="btnData">📊 Data Volume</button>
+    <button class="ctrl-btn" onclick="toggleExplode()" id="btnExplode">🏗️ Explode Floors</button>
+    <button class="ctrl-btn" onclick="toggleLabels()" id="btnLabels">🏷️ Labels</button>
+    <button class="ctrl-btn" onclick="resetCamera()">🔄 Reset View</button>
+  </div>
+  
+  <div id="hourControl">
+    <label>⏰ Hour of Day</label>
+    <div class="hour-val" id="hourVal">12:00</div>
+    <input type="range" id="hourSlider" min="0" max="23" value="12" oninput="updateHour(this.value)">
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+// ============================================================
+// DATA - Embedded from analysis
+// ============================================================
+const BUILDINGS_DATA = [
+  {
+    code: 'B77', name: 'อาคาร 40 ปี มจพ.\nและโรงอาหารกลาง', name_en: '40th Anniv. & Canteen',
+    pos: [0, 0, 0], size: [14, 1, 8], sessions: 82875, users: 7318, totalGB: 2126.6,
+    avgRSSI: -74.1, weakPct: 74.6, zeroPct: 13.0,
+    floors: [
+      { f: 'FL1', n: 1, rssi: -71.1, snr: 13.3, weak: 72.3, poor: 61.2, users: 6174, aps: 3, gb: 504.1, sessions: 33919 },
+      { f: 'FL2', n: 2, rssi: -76.5, snr: 13.3, weak: 75.7, poor: 58.9, users: 5701, aps: 5, gb: 660.7, sessions: 30878 },
+      { f: 'FL3', n: 3, rssi: -75.6, snr: 13.2, weak: 79.0, poor: 54.4, users: 1779, aps: 2, gb: 80.0, sessions: 3572 },
+      { f: 'FL4', n: 4, rssi: -75.1, snr: 12.8, weak: 76.0, poor: 59.4, users: 2877, aps: 2, gb: 318.1, sessions: 6292 },
+      { f: 'FL5', n: 5, rssi: -66.1, snr: 14.1, weak: 46.7, poor: 6.6, users: 61, aps: 1, gb: 15.4, sessions: 167 },
+      { f: 'FL6', n: 6, rssi: -77.2, snr: 15.2, weak: 81.5, poor: 52.6, users: 1110, aps: 2, gb: 306.8, sessions: 4058 },
+      { f: 'FL7', n: 7, rssi: -76.4, snr: 15.7, weak: 75.1, poor: 56.3, users: 1052, aps: 1, gb: 241.6, sessions: 3914 },
+    ]
+  },
+  {
+    code: 'B25', name: 'อาคารอเนกประสงค์', name_en: 'Multipurpose Building',
+    pos: [-20, 0, -8], size: [8, 1, 8], sessions: 62470, users: 6420, totalGB: 4909.6,
+    avgRSSI: -75.5, weakPct: 72.5, zeroPct: 6.7,
+    floors: [
+      { f: 'FL1', n: 1, rssi: -73.7, snr: 15.5, weak: 75.5, poor: 59.7, users: 4723, aps: 4, gb: 155.0, sessions: 19624 },
+      { f: 'FL2', n: 2, rssi: -73.3, snr: 15.5, weak: 72.4, poor: 55.3, users: 2463, aps: 6, gb: 353.3, sessions: 7444 },
+      { f: 'FL3', n: 3, rssi: -78.1, snr: 15.5, weak: 70.1, poor: 59.9, users: 3496, aps: 3, gb: 1903.0, sessions: 11494 },
+      { f: 'FL4', n: 4, rssi: -72.4, snr: 15.5, weak: 57.5, poor: 45.9, users: 1054, aps: 3, gb: 455.4, sessions: 2437 },
+      { f: 'FL5', n: 5, rssi: -75.4, snr: 15.7, weak: 72.0, poor: 56.3, users: 1746, aps: 6, gb: 455.7, sessions: 5313 },
+      { f: 'FL6', n: 6, rssi: -72.7, snr: 18.0, weak: 59.2, poor: 38.8, users: 531, aps: 4, gb: 536.5, sessions: 1028 },
+      // FL7-8 skip
+      { f: 'FL9', n: 9, rssi: -81.2, snr: 12.0, weak: 85.0, poor: 71.9, users: 2819, aps: 4, gb: 498.3, sessions: 9507 },
+      { f: 'FL10', n: 10, rssi: -71.6, snr: 15.8, weak: 53.0, poor: 38.8, users: 528, aps: 5, gb: 552.5, sessions: 1623 },
+    ]
+  },
+  {
+    code: 'B23/B26', name: 'อาคารนวมินทรราชินี', name_en: 'Navamindrarachinee Bldg.',
+    pos: [-10, 0, 14], size: [10, 1, 7], sessions: 20276, users: 3674, totalGB: 3256.6,
+    avgRSSI: -69.3, weakPct: 63.8, zeroPct: 6.5,
+    floors: [
+      { f: 'FL1', n: 1, rssi: -74.3, snr: 13.5, weak: 81.3, poor: 59.9, users: 1810, aps: 4, gb: 188.5, sessions: 5356 },
+      { f: 'FL3', n: 3, rssi: -80.4, snr: 14.8, weak: 82.1, poor: 63.0, users: 109, aps: 1, gb: 266.3, sessions: 868 },
+      { f: 'FL4', n: 4, rssi: -77.0, snr: 18.2, weak: 73.2, poor: 40.1, users: 114, aps: 1, gb: 320.4, sessions: 751 },
+      { f: 'FL5', n: 5, rssi: -75.7, snr: 19.9, weak: 63.6, poor: 43.6, users: 80, aps: 1, gb: 125.0, sessions: 291 },
+      { f: 'FL6', n: 6, rssi: -77.5, snr: 18.0, weak: 64.1, poor: 46.2, users: 23, aps: 1, gb: 78.4, sessions: 195 },
+      { f: 'FL7', n: 7, rssi: -76.8, snr: 18.1, weak: 78.9, poor: 38.5, users: 203, aps: 1, gb: 304.3, sessions: 849 },
+      { f: 'FL10', n: 10, rssi: -62.7, snr: 30.0, weak: 51.5, poor: 35.0, users: 1157, aps: 4, gb: 646.6, sessions: 2760 },
+      { f: 'FL11', n: 11, rssi: -65.8, snr: 28.0, weak: 53.6, poor: 41.1, users: 2024, aps: 7, gb: 1327.2, sessions: 9206 },
+    ]
+  },
+  {
+    code: 'B46', name: 'อาคารคณะศิลปศาสตร์\nประยุกต์และโรงอาหาร', name_en: 'Applied Arts & Cafeteria',
+    pos: [16, 0, 10], size: [9, 1, 7], sessions: 11501, users: 2941, totalGB: 884.8,
+    avgRSSI: -66.8, weakPct: 48.5, zeroPct: 4.2,
+    floors: [
+      { f: 'FL2', n: 2, rssi: -69.5, snr: 20.0, weak: 57.9, poor: 34.4, users: 475, aps: 3, gb: 76.6, sessions: 1160 },
+      { f: 'FL3', n: 3, rssi: -66.6, snr: 22.0, weak: 47.5, poor: 8.7, users: 2256, aps: 7, gb: 417.6, sessions: 6855 },
+      { f: 'FL4', n: 4, rssi: -70.6, snr: 18.0, weak: 62.3, poor: 34.4, users: 1053, aps: 9, gb: 274.9, sessions: 3088 },
+      { f: 'FL5', n: 5, rssi: -60.4, snr: 25.0, weak: 28.5, poor: 5.0, users: 412, aps: 2, gb: 115.6, sessions: 398 },
+    ]
+  },
+  {
+    code: 'B67', name: 'อาคารวิทยาลัย\nเทคโนโลยีอุตสาหกรรม', name_en: 'College of Industrial Tech.',
+    pos: [18, 0, -6], size: [10, 1, 8], sessions: 6957, users: 1771, totalGB: 597.7,
+    avgRSSI: -70.6, weakPct: 62.6, zeroPct: 4.3,
+    floors: [
+      { f: 'FL1', n: 1, rssi: -69.9, snr: 20.0, weak: 64.3, poor: 36.3, users: 857, aps: 4, gb: 190.2, sessions: 2928 },
+      { f: 'FL2', n: 2, rssi: -61.6, snr: 25.0, weak: 38.3, poor: 17.8, users: 230, aps: 4, gb: 83.3, sessions: 303 },
+      { f: 'FL3', n: 3, rssi: -76.0, snr: 16.7, weak: 74.2, poor: 56.5, users: 1189, aps: 5, gb: 324.2, sessions: 3053 },
+    ]
+  },
+  {
+    code: 'B79', name: 'อาคารสโมสร\nบุคลากร มจพ.', name_en: 'Staff Club',
+    pos: [-22, 0, 6], size: [6, 1, 5], sessions: 5366, users: 1957, totalGB: 1058.7,
+    avgRSSI: -72.7, weakPct: 61.1, zeroPct: 3.6,
+    floors: [
+      { f: 'FLINN', n: 1, rssi: -72.7, snr: 18.0, weak: 61.1, poor: 45.9, users: 1957, aps: 2, gb: 1058.7, sessions: 5366 },
+    ]
+  }
+];
+
+const SUMMARY = {
+  totalSessions: 189445, totalUsers: 8546, totalAPs: 107,
+  totalGB: 12834.1, avgRSSI: -73.4, avgSNR: 16.2, weakPct: 70.4,
+  dateRange: '2026-01-01 ~ 2026-01-31'
+};
+
+// ============================================================
+// THREE.JS SETUP
+// ============================================================
+let scene, camera, renderer, controls;
+let buildingGroups = [];
+let floorMeshes = [];
+let apSpheres = [];
+let labelSprites = [];
+let deadZoneIndicators = [];
+let currentView = 'signal';
+let isExploded = false;
+let showLabels = true;
+let raycaster, mouse;
+let hoveredFloor = null;
+let clock;
+
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a1a);
+  scene.fog = new THREE.FogExp2(0x0a0a1a, 0.006);
+  
+  camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 500);
+  camera.position.set(40, 35, 40);
+  camera.lookAt(0, 5, 0);
+  
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  document.getElementById('container').appendChild(renderer.domElement);
+  
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.maxPolarAngle = Math.PI / 2.2;
+  controls.minDistance = 15;
+  controls.maxDistance = 100;
+  controls.target.set(0, 5, 0);
+  
+  raycaster = new THREE.Raycaster();
+  mouse = new THREE.Vector2();
+  clock = new THREE.Clock();
+  
+  // Lights
+  const ambientLight = new THREE.AmbientLight(0x404070, 0.6);
+  scene.add(ambientLight);
+  
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  dirLight.position.set(30, 50, 30);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.width = 2048;
+  dirLight.shadow.mapSize.height = 2048;
+  dirLight.shadow.camera.near = 1;
+  dirLight.shadow.camera.far = 100;
+  dirLight.shadow.camera.left = -50;
+  dirLight.shadow.camera.right = 50;
+  dirLight.shadow.camera.top = 50;
+  dirLight.shadow.camera.bottom = -50;
+  scene.add(dirLight);
+  
+  const pointLight1 = new THREE.PointLight(0x6060ff, 0.4, 80);
+  pointLight1.position.set(-20, 20, -10);
+  scene.add(pointLight1);
+  
+  const pointLight2 = new THREE.PointLight(0xff6060, 0.3, 80);
+  pointLight2.position.set(20, 20, 10);
+  scene.add(pointLight2);
+  
+  // Ground
+  const groundGeo = new THREE.PlaneGeometry(120, 80);
+  const groundMat = new THREE.MeshStandardMaterial({ 
+    color: 0x1a2a1a, roughness: 0.9, metalness: 0.1 
+  });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.1;
+  ground.receiveShadow = true;
+  scene.add(ground);
+  
+  // Grid
+  const grid = new THREE.GridHelper(120, 60, 0x222255, 0x111133);
+  grid.position.y = 0;
+  scene.add(grid);
+  
+  // Roads (decorative)
+  addRoads();
+  
+  // Trees (decorative)
+  addTrees();
+  
+  // Build buildings
+  createBuildings();
+  
+  // UI
+  buildUI();
+  
+  // Events
+  window.addEventListener('resize', onResize);
+  renderer.domElement.addEventListener('mousemove', onMouseMove);
+  renderer.domElement.addEventListener('click', onMouseClick);
+}
+
+function addRoads() {
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x333340, roughness: 0.8 });
+  // Main road
+  const road1 = new THREE.Mesh(new THREE.PlaneGeometry(100, 2), roadMat);
+  road1.rotation.x = -Math.PI / 2;
+  road1.position.set(0, 0.02, -18);
+  scene.add(road1);
+  
+  const road2 = new THREE.Mesh(new THREE.PlaneGeometry(2, 50), roadMat);
+  road2.rotation.x = -Math.PI / 2;
+  road2.position.set(-30, 0.02, 0);
+  scene.add(road2);
+}
+
+function addTrees() {
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3a2a });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x1a5a1a, transparent: true, opacity: 0.8 });
+  
+  const treePositions = [
+    [-15, -15], [-12, -12], [10, -12], [25, -12],
+    [-28, -5], [-28, 10], [28, 5], [28, -10],
+    [-5, 20], [5, 20], [15, 18], [-15, 12],
+  ];
+  
+  treePositions.forEach(([x, z]) => {
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 1.5, 6), trunkMat);
+    trunk.position.set(x, 0.75, z);
+    scene.add(trunk);
+    const leaves = new THREE.Mesh(new THREE.SphereGeometry(0.8, 8, 6), leafMat);
+    leaves.position.set(x, 2, z);
+    scene.add(leaves);
+  });
+}
+
+function rssiToColor(rssi) {
+  if (rssi >= -50) return new THREE.Color(0x00ff88);
+  if (rssi >= -60) return new THREE.Color(0x44cc44);
+  if (rssi >= -67) return new THREE.Color(0xffdd00);
+  if (rssi >= -70) return new THREE.Color(0xff9900);
+  if (rssi >= -80) return new THREE.Color(0xff4444);
+  return new THREE.Color(0xcc0000);
+}
+
+function weakToColor(weakPct) {
+  if (weakPct < 30) return new THREE.Color(0x00ff88);
+  if (weakPct < 50) return new THREE.Color(0xffdd00);
+  if (weakPct < 70) return new THREE.Color(0xff9900);
+  return new THREE.Color(0xff4444);
+}
+
+function usersToColor(users, maxUsers) {
+  const t = Math.min(users / maxUsers, 1);
+  const c = new THREE.Color();
+  c.setHSL(0.6 - t * 0.6, 0.8, 0.3 + t * 0.4);
+  return c;
+}
+
+function dataToColor(gb, maxGB) {
+  const t = Math.min(gb / maxGB, 1);
+  const c = new THREE.Color();
+  c.setHSL(0.55 - t * 0.55, 0.7, 0.3 + t * 0.3);
+  return c;
+}
+
+function createBuildings() {
+  const maxUsers = Math.max(...BUILDINGS_DATA.flatMap(b => b.floors.map(f => f.users)));
+  const maxGB = Math.max(...BUILDINGS_DATA.flatMap(b => b.floors.map(f => f.gb)));
+  const floorHeight = 1.4;
+  const gap = 0.08;
+  
+  BUILDINGS_DATA.forEach((bldg, bi) => {
+    const group = new THREE.Group();
+    group.position.set(bldg.pos[0], 0, bldg.pos[2]);
+    group.userData = { building: bldg, index: bi };
+    
+    // Building base/foundation
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x2a2a3a, roughness: 0.7 });
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(bldg.size[0] + 0.4, 0.3, bldg.size[2] + 0.4),
+      baseMat
+    );
+    base.position.y = 0.15;
+    base.receiveShadow = true;
+    group.add(base);
+    
+    // Create floors
+    bldg.floors.forEach((floor, fi) => {
+      const y = 0.3 + fi * (floorHeight + gap);
+      const color = rssiToColor(floor.rssi);
+      
+      const mat = new THREE.MeshStandardMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.85,
+        roughness: 0.4,
+        metalness: 0.1,
+      });
+      
+      const geo = new THREE.BoxGeometry(bldg.size[0], floorHeight, bldg.size[2]);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.y = y + floorHeight / 2;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.userData = { 
+        building: bldg, floor: floor, buildingIndex: bi, floorIndex: fi,
+        originalY: y + floorHeight / 2, type: 'floor'
+      };
+      
+      group.add(mesh);
+      floorMeshes.push(mesh);
+      
+      // Edge wireframe
+      const edgeGeo = new THREE.EdgesGeometry(geo);
+      const edgeMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.15 });
+      const edges = new THREE.LineSegments(edgeGeo, edgeMat);
+      edges.position.copy(mesh.position);
+      group.add(edges);
+      
+      // Dead zone indicator (pulsing red sphere)
+      if (floor.weak > 70) {
+        const sphereGeo = new THREE.SphereGeometry(0.5, 16, 16);
+        const sphereMat = new THREE.MeshBasicMaterial({
+          color: 0xff0000, transparent: true, opacity: 0.5,
+        });
+        const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+        sphere.position.set(
+          bldg.size[0] / 2 + 1, y + floorHeight / 2, 0
+        );
+        sphere.userData = { type: 'deadzone', floor: floor, building: bldg };
+        group.add(sphere);
+        deadZoneIndicators.push(sphere);
+      }
+      
+      // Floor label
+      const floorLabel = createTextSprite(floor.f, 0.4);
+      floorLabel.position.set(-bldg.size[0] / 2 - 0.8, y + floorHeight / 2, 0);
+      floorLabel.userData = { type: 'label' };
+      group.add(floorLabel);
+      labelSprites.push(floorLabel);
+    });
+    
+    // Building name label
+    const topY = 0.3 + bldg.floors.length * (floorHeight + gap) + 1;
+    const nameLabel = createTextSprite(bldg.code + '\n' + bldg.name_en, 0.7);
+    nameLabel.position.set(0, topY, 0);
+    nameLabel.userData = { type: 'label' };
+    group.add(nameLabel);
+    labelSprites.push(nameLabel);
+    
+    scene.add(group);
+    buildingGroups.push(group);
+  });
+}
+
+function createTextSprite(text, scale = 1) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const lines = text.split('\n');
+  
+  canvas.width = 256;
+  canvas.height = 64 * lines.length;
+  
+  ctx.fillStyle = 'rgba(0,0,0,0)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  ctx.font = 'bold 24px Segoe UI, Tahoma';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 3;
+  
+  lines.forEach((line, i) => {
+    const y = 30 + i * 32;
+    ctx.strokeText(line, canvas.width / 2, y);
+    ctx.fillText(line, canvas.width / 2, y);
+  });
+  
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  
+  const spriteMat = new THREE.SpriteMaterial({ 
+    map: texture, transparent: true, opacity: 0.9,
+    depthTest: false,
+  });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.scale.set(scale * 4 * (lines.length > 1 ? 1.2 : 1), scale * 1.5 * lines.length, 1);
+  return sprite;
+}
+
+// ============================================================
+// VIEW MODES
+// ============================================================
+function toggleView(mode) {
+  currentView = mode;
+  document.querySelectorAll('#controls .ctrl-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn' + mode.charAt(0).toUpperCase() + mode.slice(1)).classList.add('active');
+  
+  const maxUsers = Math.max(...BUILDINGS_DATA.flatMap(b => b.floors.map(f => f.users)));
+  const maxGB = Math.max(...BUILDINGS_DATA.flatMap(b => b.floors.map(f => f.gb)));
+  
+  floorMeshes.forEach(mesh => {
+    const floor = mesh.userData.floor;
+    let color;
+    switch(mode) {
+      case 'signal': color = rssiToColor(floor.rssi); break;
+      case 'users': color = usersToColor(floor.users, maxUsers); break;
+      case 'data': color = dataToColor(floor.gb, maxGB); break;
+    }
+    mesh.material.color = color;
+    mesh.material.needsUpdate = true;
+  });
+}
+
+function toggleExplode() {
+  isExploded = !isExploded;
+  document.getElementById('btnExplode').classList.toggle('active', isExploded);
+  
+  const floorHeight = 1.4;
+  const gap = 0.08;
+  const explodeGap = isExploded ? 1.5 : 0;
+  
+  floorMeshes.forEach(mesh => {
+    const fi = mesh.userData.floorIndex;
+    const baseY = mesh.userData.originalY;
+    const targetY = baseY + fi * explodeGap;
+    mesh.userData.targetY = targetY;
+  });
+}
+
+function toggleLabels() {
+  showLabels = !showLabels;
+  document.getElementById('btnLabels').classList.toggle('active', showLabels);
+  labelSprites.forEach(s => { s.visible = showLabels; });
+}
+
+function resetCamera() {
+  camera.position.set(40, 35, 40);
+  controls.target.set(0, 5, 0);
+  controls.update();
+}
+
+function updateHour(h) {
+  document.getElementById('hourVal').textContent = String(h).padStart(2, '0') + ':00';
+}
+
+// ============================================================
+// UI
+// ============================================================
+function buildUI() {
+  // Global stats
+  const statsHtml = `
+    <div class="stat-item"><div class="stat-val">${SUMMARY.totalSessions.toLocaleString()}</div><div class="stat-label">Sessions</div></div>
+    <div class="stat-item"><div class="stat-val">${SUMMARY.totalUsers.toLocaleString()}</div><div class="stat-label">Users</div></div>
+    <div class="stat-item"><div class="stat-val">${SUMMARY.totalAPs}</div><div class="stat-label">APs</div></div>
+    <div class="stat-item"><div class="stat-val">${SUMMARY.totalGB.toLocaleString()} GB</div><div class="stat-label">Data</div></div>
+    <div class="stat-item"><div class="stat-val" style="color:${SUMMARY.weakPct > 50 ? '#ff4444' : '#ffdd00'}">${SUMMARY.weakPct}%</div><div class="stat-label">Weak Signal</div></div>
+    <div class="stat-item"><div class="stat-val">${SUMMARY.avgRSSI} dBm</div><div class="stat-label">Avg RSSI</div></div>
+  `;
+  document.getElementById('globalStats').innerHTML = statsHtml;
+  
+  // Building cards
+  let html = '<h3>🏛️ Buildings</h3>';
+  BUILDINGS_DATA.forEach((bldg, i) => {
+    const rssiColor = bldg.avgRSSI >= -67 ? '#ffdd00' : bldg.avgRSSI >= -80 ? '#ff4444' : '#cc0000';
+    const weakColor = bldg.weakPct > 70 ? '#ff4444' : bldg.weakPct > 50 ? '#ff9900' : '#ffdd00';
+    html += `
+      <div class="building-card" onclick="focusBuilding(${i})" id="bcard-${i}">
+        <div class="bname">${bldg.code} - ${bldg.name.replace(/\n/g, ' ')}</div>
+        <div class="bname-en">${bldg.name_en}</div>
+        <div class="bstats">
+          <div class="bstat">👥 ${bldg.users.toLocaleString()}</div>
+          <div class="bstat">📡 ${bldg.sessions.toLocaleString()}</div>
+          <div class="bstat">💾 ${bldg.totalGB.toLocaleString()} GB</div>
+          <div class="bstat rssi-badge" style="background:${rssiColor}33; color:${rssiColor}">
+            📶 ${bldg.avgRSSI} dBm
+          </div>
+          <div class="bstat rssi-badge" style="background:${weakColor}33; color:${weakColor}">
+            ⚠️ Weak: ${bldg.weakPct}%
+          </div>
+        </div>
+      </div>`;
+  });
+  document.getElementById('sidepanel').innerHTML = html;
+  
+  // Set initial active view
+  document.getElementById('btnSignal').classList.add('active');
+  document.getElementById('btnLabels').classList.add('active');
+}
+
+function focusBuilding(index) {
+  const bldg = BUILDINGS_DATA[index];
+  const group = buildingGroups[index];
+  
+  // Highlight card
+  document.querySelectorAll('.building-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('bcard-' + index).classList.add('active');
+  
+  // Move camera
+  const targetPos = new THREE.Vector3(
+    bldg.pos[0] + 15, 
+    bldg.floors.length * 2 + 8, 
+    bldg.pos[2] + 15
+  );
+  const targetLook = new THREE.Vector3(bldg.pos[0], bldg.floors.length * 0.7, bldg.pos[2]);
+  
+  // Animate camera
+  const startPos = camera.position.clone();
+  const startTarget = controls.target.clone();
+  let t = 0;
+  
+  function animateCam() {
+    t += 0.03;
+    if (t > 1) t = 1;
+    const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    
+    camera.position.lerpVectors(startPos, targetPos, ease);
+    controls.target.lerpVectors(startTarget, targetLook, ease);
+    controls.update();
+    
+    if (t < 1) requestAnimationFrame(animateCam);
+  }
+  animateCam();
+  
+  // Show floor detail
+  showFloorDetail(bldg);
+}
+
+function showFloorDetail(bldg) {
+  const panel = document.getElementById('floorDetail');
+  panel.style.display = 'block';
+  
+  let html = `<h3>📊 ${bldg.code} - ${bldg.name_en}</h3>`;
+  html += `<div style="font-size:11px; color:#888; margin-bottom:10px;">
+    Total: ${bldg.sessions.toLocaleString()} sessions | ${bldg.users.toLocaleString()} users | ${bldg.totalGB} GB
+  </div>`;
+  
+  // Sort floors by floor number
+  const sortedFloors = [...bldg.floors].sort((a, b) => b.n - a.n);
+  
+  sortedFloors.forEach(f => {
+    const color = f.rssi >= -60 ? '#44cc44' : f.rssi >= -67 ? '#ffdd00' : f.rssi >= -70 ? '#ff9900' : f.rssi >= -80 ? '#ff4444' : '#cc0000';
+    const deadzone = f.weak > 70 ? ' 🔴 DEAD ZONE' : f.weak > 50 ? ' ⚠️' : '';
+    
+    html += `
+      <div class="floor-row" style="border-left-color: ${color}">
+        <div class="fname">${f.f}</div>
+        <div class="fstats">
+          <span class="fstat">📶 ${f.rssi} dBm</span>
+          <span class="fstat">⚠️ Weak ${f.weak}%</span>
+          <span class="fstat">👥 ${f.users.toLocaleString()}</span>
+          <span class="fstat">📡 ${f.aps} APs</span>
+          <span class="fstat">💾 ${f.gb} GB</span>
+          <span style="color:${f.weak > 70 ? '#ff4444' : '#ff9900'}; font-weight:600;">${deadzone}</span>
+        </div>
+      </div>`;
+  });
+  
+  // Recommendations
+  const worstFloor = sortedFloors.reduce((a, b) => a.rssi < b.rssi ? a : b);
+  const worstWeak = sortedFloors.reduce((a, b) => a.weak > b.weak ? a : b);
+  
+  html += `
+    <div style="margin-top:12px; padding:10px; background:rgba(255,50,50,0.1); border-radius:6px; border-left:3px solid #ff4444;">
+      <div style="font-size:11px; font-weight:600; color:#ff6666;">🔍 Critical Issues:</div>
+      <div style="font-size:10px; color:#ddd; margin-top:4px;">
+        • Worst signal: ${worstFloor.f} (RSSI: ${worstFloor.rssi} dBm)<br>
+        • Most failures: ${worstWeak.f} (${worstWeak.weak}% weak sessions)<br>
+        • ${bldg.zeroPct > 5 ? `⚠️ ${bldg.zeroPct}% sessions transfer 0 bytes (connection failures)` : ''}
+      </div>
+    </div>
+    <div style="margin-top:8px; padding:10px; background:rgba(50,200,100,0.1); border-radius:6px; border-left:3px solid #44cc44;">
+      <div style="font-size:11px; font-weight:600; color:#44cc44;">💡 Recommended Actions:</div>
+      <div style="font-size:10px; color:#ddd; margin-top:4px;">
+        • Add ${Math.ceil(bldg.floors.filter(f => f.weak > 60).length * 1.5)} new APs to weak floors<br>
+        • Deploy signal repeaters on ${worstFloor.f}<br>
+        • Enable band steering for 5GHz preference<br>
+        • Site survey with Ekahau AI Pro
+      </div>
+    </div>`;
+  
+  panel.innerHTML = html;
+}
+
+// ============================================================
+// INTERACTION
+// ============================================================
+function onMouseMove(e) {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(floorMeshes);
+  
+  const tooltip = document.getElementById('tooltip');
+  
+  // Reset highlight
+  if (hoveredFloor && hoveredFloor.material) {
+    hoveredFloor.material.opacity = 0.85;
+    hoveredFloor.material.emissive.setHex(0x000000);
+  }
+  
+  if (intersects.length > 0) {
+    const mesh = intersects[0].object;
+    if (mesh.userData.type === 'floor') {
+      hoveredFloor = mesh;
+      mesh.material.opacity = 1.0;
+      mesh.material.emissive.setHex(0x222244);
+      
+      const f = mesh.userData.floor;
+      const b = mesh.userData.building;
+      
+      tooltip.style.display = 'block';
+      tooltip.style.left = (e.clientX + 12) + 'px';
+      tooltip.style.top = (e.clientY - 10) + 'px';
+      
+      const qualityLabel = f.rssi >= -50 ? 'Excellent ✅' : f.rssi >= -60 ? 'Very Good 👍' : 
+                          f.rssi >= -67 ? 'Good 👌' : f.rssi >= -70 ? 'Fair ⚠️' : 
+                          f.rssi >= -80 ? 'Weak ❌' : 'Very Poor 🚫';
+      
+      tooltip.innerHTML = `
+        <div class="tt-name">${b.code} - ${f.f}</div>
+        <div class="tt-row">📶 RSSI: <strong>${f.rssi} dBm</strong> (${qualityLabel})</div>
+        <div class="tt-row">📊 SNR: ${f.snr} dB</div>
+        <div class="tt-row">⚠️ Weak sessions: <strong style="color:${f.weak > 70 ? '#ff4444' : '#ff9900'}">${f.weak}%</strong></div>
+        <div class="tt-row">🚫 Very Poor sessions: ${f.poor}%</div>
+        <div class="tt-row">👥 Users: ${f.users.toLocaleString()}</div>
+        <div class="tt-row">📡 APs installed: ${f.aps}</div>
+        <div class="tt-row">💾 Data transferred: ${f.gb} GB</div>
+        <div class="tt-row">📱 Sessions: ${f.sessions.toLocaleString()}</div>
+      `;
+      
+      document.body.style.cursor = 'pointer';
+      return;
+    }
+  }
+  
+  tooltip.style.display = 'none';
+  document.body.style.cursor = 'default';
+  hoveredFloor = null;
+}
+
+function onMouseClick(e) {
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(floorMeshes);
+  
+  if (intersects.length > 0) {
+    const mesh = intersects[0].object;
+    if (mesh.userData.type === 'floor') {
+      focusBuilding(mesh.userData.buildingIndex);
+    }
+  }
+}
+
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// ============================================================
+// PARTICLE SYSTEM - Data flow particles
+// ============================================================
+let particleSystem;
+function createParticles() {
+  const count = 300;
+  const geo = new THREE.BufferGeometry();
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const velocities = [];
+  
+  for (let i = 0; i < count; i++) {
+    const bi = Math.floor(Math.random() * BUILDINGS_DATA.length);
+    const b = BUILDINGS_DATA[bi];
+    positions[i * 3] = b.pos[0] + (Math.random() - 0.5) * b.size[0];
+    positions[i * 3 + 1] = Math.random() * b.floors.length * 1.5 + 0.5;
+    positions[i * 3 + 2] = b.pos[2] + (Math.random() - 0.5) * b.size[2];
+    
+    // Color based on building signal quality
+    const col = rssiToColor(b.avgRSSI);
+    colors[i * 3] = col.r;
+    colors[i * 3 + 1] = col.g;
+    colors[i * 3 + 2] = col.b;
+    
+    velocities.push({
+      y: 0.01 + Math.random() * 0.03,
+      maxY: b.floors.length * 1.5 + 2,
+      bi: bi
+    });
+  }
+  
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  
+  const mat = new THREE.PointsMaterial({
+    size: 0.15, vertexColors: true, transparent: true, opacity: 0.6,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  
+  particleSystem = new THREE.Points(geo, mat);
+  particleSystem.userData.velocities = velocities;
+  scene.add(particleSystem);
+}
+
+function animateParticles() {
+  if (!particleSystem) return;
+  const positions = particleSystem.geometry.attributes.position.array;
+  const vels = particleSystem.userData.velocities;
+  
+  for (let i = 0; i < vels.length; i++) {
+    positions[i * 3 + 1] += vels[i].y;
+    if (positions[i * 3 + 1] > vels[i].maxY) {
+      const b = BUILDINGS_DATA[vels[i].bi];
+      positions[i * 3] = b.pos[0] + (Math.random() - 0.5) * b.size[0];
+      positions[i * 3 + 1] = 0.5;
+      positions[i * 3 + 2] = b.pos[2] + (Math.random() - 0.5) * b.size[2];
+    }
+  }
+  particleSystem.geometry.attributes.position.needsUpdate = true;
+}
+
+// ============================================================
+// MINIMAP
+// ============================================================
+function drawMinimap() {
+  const canvas = document.querySelector('#minimap canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = 160;
+  canvas.height = 120;
+  
+  ctx.fillStyle = '#0a0a1a';
+  ctx.fillRect(0, 0, 160, 120);
+  
+  // Scale: map world coords to minimap
+  const scale = 2.5;
+  const ox = 80, oy = 60;
+  
+  BUILDINGS_DATA.forEach((b, i) => {
+    const x = ox + b.pos[0] * scale;
+    const y = oy + b.pos[2] * scale;
+    const w = b.size[0] * scale;
+    const h = b.size[2] * scale;
+    
+    const col = rssiToColor(b.avgRSSI);
+    ctx.fillStyle = `rgb(${Math.floor(col.r*255)},${Math.floor(col.g*255)},${Math.floor(col.b*255)})`;
+    ctx.globalAlpha = 0.7;
+    ctx.fillRect(x - w/2, y - h/2, w, h);
+    ctx.globalAlpha = 1;
+    
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(x - w/2, y - h/2, w, h);
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '7px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(b.code, x, y + 3);
+  });
+  
+  // Camera position indicator
+  const camX = ox + camera.position.x * scale * 0.3;
+  const camZ = oy + camera.position.z * scale * 0.3;
+  ctx.fillStyle = '#60a5fa';
+  ctx.beginPath();
+  ctx.arc(Math.max(5, Math.min(155, camX)), Math.max(5, Math.min(115, camZ)), 3, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ============================================================
+// ANIMATION
+// ============================================================
+function animate() {
+  requestAnimationFrame(animate);
+  
+  const time = clock.getElapsedTime();
+  
+  // Animate dead zone indicators (pulsing)
+  deadZoneIndicators.forEach((sphere, i) => {
+    const pulse = 0.3 + 0.5 * Math.sin(time * 3 + i * 1.5);
+    sphere.material.opacity = pulse;
+    const scale = 0.8 + 0.4 * Math.sin(time * 2 + i);
+    sphere.scale.set(scale, scale, scale);
+  });
+  
+  // Animate explode/collapse
+  floorMeshes.forEach(mesh => {
+    if (mesh.userData.targetY !== undefined) {
+      const diff = mesh.userData.targetY - mesh.position.y;
+      if (Math.abs(diff) > 0.01) {
+        mesh.position.y += diff * 0.08;
+      }
+    }
+  });
+  
+  // Animate particles
+  animateParticles();
+  
+  // Update minimap every 30 frames
+  if (Math.floor(time * 60) % 30 === 0) {
+    drawMinimap();
+  }
+  
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+// ============================================================
+// BOOTSTRAP
+// ============================================================
+init();             // setup scene, buildings, lights
+createParticles();  // data-flow particles
+
+// Build minimap element
+const minimapDiv = document.createElement('div');
+minimapDiv.id = 'minimap';
+minimapDiv.innerHTML = '<canvas></canvas>';
+document.getElementById('container').appendChild(minimapDiv);
+
+animate();          // start render loop
+</script>
+</body>
+</html>

@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KMUTNB Wi-Fi Network - 3D Campus Signal Quality Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0a0a1a; color: #e0e0e0; overflow: hidden; }
+  #container { width: 100vw; height: 100vh; position: relative; }
+  canvas { display: block; }
+
+  /* Top bar */
+  #topbar {
+    position: absolute; top: 0; left: 0; right: 0;
+    background: linear-gradient(180deg, rgba(10,10,26,0.97) 0%, rgba(10,10,26,0.80) 100%);
+    padding: 10px 20px; display: flex; justify-content: space-between; align-items: center;
+    z-index: 100; border-bottom: 1px solid rgba(100,100,255,0.2);
+  }
+  #topbar h1 { font-size: 16px; font-weight: 700; background: linear-gradient(90deg,#60a5fa,#a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  #topbar .sub { font-size: 10px; color: #777; margin-top: 1px; }
+  .stats-row { display: flex; gap: 12px; align-items: center; }
+  .stat-item { text-align: center; padding: 3px 10px; border: 1px solid rgba(100,100,255,0.12); border-radius: 6px; background: rgba(25,25,55,0.5); }
+  .stat-val { font-size: 14px; font-weight: 700; color: #60a5fa; }
+  .stat-label { font-size: 8px; color: #777; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Tab Menu */
+  #tabMenu {
+    position: absolute; top: 56px; left: 0; right: 0;
+    background: rgba(12,12,30,0.95); border-bottom: 1px solid rgba(100,100,255,0.15);
+    display: flex; z-index: 100; padding: 0 16px;
+  }
+  .tab-btn {
+    padding: 8px 16px; font-size: 11px; color: #888;
+    border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent;
+    transition: all 0.2s; white-space: nowrap;
+  }
+  .tab-btn:hover { color: #bbb; }
+  .tab-btn.active { color: #60a5fa; border-bottom-color: #60a5fa; font-weight: 600; }
+
+  /* Side panels */
+  .side-panel {
+    position: absolute; top: 90px; max-height: calc(100vh - 110px);
+    background: rgba(12,12,30,0.94); border: 1px solid rgba(100,100,255,0.18);
+    border-radius: 10px; padding: 14px; overflow-y: auto; z-index: 100;
+    backdrop-filter: blur(12px); display: none;
+  }
+  #panelBuildings { right: 10px; width: 310px; display: block; }
+  #panelInsights { left: 10px; width: 380px; }
+  #panelFloor { left: 10px; width: 360px; }
+
+  .side-panel h3 { font-size: 13px; color: #a78bfa; border-bottom: 1px solid rgba(100,100,255,0.18); padding-bottom: 5px; margin-bottom: 8px; }
+
+  /* Building cards */
+  .bcard {
+    background: rgba(25,25,55,0.5); border: 1px solid rgba(100,100,255,0.12);
+    border-radius: 7px; padding: 8px 10px; margin-bottom: 6px; cursor: pointer;
+    transition: all 0.25s; border-left: 3px solid transparent;
+  }
+  .bcard:hover, .bcard.active { border-color: #60a5fa; background: rgba(40,40,80,0.5); transform: translateX(-3px); }
+  .bcard .bname { font-size: 11px; font-weight: 600; }
+  .bcard .bsub { font-size: 9px; color: #777; }
+  .bcard .bstats { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+  .bcard .bs { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(40,40,80,0.5); }
+  .badge { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 600; }
+
+  /* Insight cards */
+  .insight-card {
+    background: rgba(25,25,55,0.5); border: 1px solid rgba(100,100,255,0.12);
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+    border-left: 3px solid #a78bfa;
+  }
+  .insight-card h4 { font-size: 12px; font-weight: 600; color: #60a5fa; margin-bottom: 4px; }
+  .insight-card .finding { font-size: 10px; color: #ccc; margin-bottom: 6px; line-height: 1.5; }
+  .insight-card .solution { font-size: 10px; color: #7cd47c; background: rgba(40,160,40,0.1); border-radius: 4px; padding: 6px 8px; line-height: 1.5; }
+  .insight-card .val { font-weight: 700; color: #ff6b6b; }
+  .insight-card .val-ok { font-weight: 700; color: #4ecdc4; }
+
+  /* Floor detail */
+  .floor-row {
+    display: flex; align-items: center; gap: 6px; padding: 5px 7px; margin-bottom: 3px;
+    border-radius: 5px; background: rgba(25,25,55,0.4); border-left: 3px solid; font-size: 10px;
+  }
+  .floor-row .fn { font-weight: 600; min-width: 36px; }
+  .floor-row .fs { color: #aaa; }
+
+  /* Tooltip */
+  #tooltip {
+    position: absolute; display: none; background: rgba(8,8,24,0.96);
+    border: 1px solid rgba(100,100,255,0.35); border-radius: 8px; padding: 10px 14px;
+    font-size: 11px; z-index: 200; pointer-events: none; max-width: 280px; backdrop-filter: blur(12px);
+  }
+  #tooltip .tn { font-weight: 600; color: #60a5fa; font-size: 12px; }
+  #tooltip .tr { margin-top: 2px; color: #bbb; }
+
+  /* Legend */
+  #legend {
+    position: absolute; bottom: 10px; left: 10px;
+    background: rgba(12,12,30,0.92); border: 1px solid rgba(100,100,255,0.18);
+    border-radius: 8px; padding: 8px 12px; z-index: 100; font-size: 9px;
+  }
+  #legend h4 { font-size: 10px; color: #888; margin-bottom: 4px; }
+  .lr { display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
+  .ld { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* Controls */
+  #controls {
+    position: absolute; bottom: 10px; right: 10px;
+    display: flex; gap: 6px; z-index: 100; flex-wrap: wrap; justify-content: flex-end; max-width: 420px;
+  }
+  .cb {
+    background: rgba(25,25,55,0.85); border: 1px solid rgba(100,100,255,0.25);
+    color: #ccc; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 10px;
+    transition: all 0.2s; user-select: none;
+  }
+  .cb:hover { background: rgba(50,50,100,0.8); border-color: #60a5fa; }
+  .cb.active { background: rgba(60,100,200,0.45); border-color: #60a5fa; color: #fff; }
+
+  /* Minimap */
+  #minimap {
+    position: absolute; bottom: 48px; left: 10px; width: 140px; height: 100px;
+    background: rgba(12,12,30,0.9); border: 1px solid rgba(100,100,255,0.18);
+    border-radius: 6px; z-index: 100; overflow: hidden;
+  }
+  #minimap canvas { width: 100%; height: 100%; }
+
+  ::-webkit-scrollbar { width: 3px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(100,100,255,0.25); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="container">
+  <!-- Top Bar -->
+  <div id="topbar">
+    <div>
+      <h1>🏛️ KMUTNB Campus Wi-Fi 3D Signal Analytics</h1>
+      <div class="sub">ICIT Data Insight & Analytics Challenge 2026 | มกราคม 2569 | 189,445 sessions</div>
+    </div>
+    <div class="stats-row" id="globalStats"></div>
+  </div>
+
+  <!-- Tab Menu -->
+  <div id="tabMenu">
+    <button class="tab-btn active" onclick="switchTab('3d')">🏛️ 3D Campus</button>
+    <button class="tab-btn" onclick="switchTab('buildings')">🏢 Buildings</button>
+    <button class="tab-btn" onclick="switchTab('insights')">💡 Insights (15)</button>
+    <button class="tab-btn" onclick="switchTab('problems')">🔴 Pain Points</button>
+    <button class="tab-btn" onclick="switchTab('solutions')">🟢 Solutions</button>
+  </div>
+
+  <!-- Panels -->
+  <div class="side-panel" id="panelBuildings"></div>
+  <div class="side-panel" id="panelInsights"></div>
+  <div class="side-panel" id="panelFloor"></div>
+
+  <div id="tooltip"></div>
+
+  <!-- Legend -->
+  <div id="legend">
+    <h4>📶 Signal Quality (RSSI)</h4>
+    <div class="lr"><div class="ld" style="background:#00ff88"></div> Excellent (≥-50)</div>
+    <div class="lr"><div class="ld" style="background:#44cc44"></div> Very Good (-51~-60)</div>
+    <div class="lr"><div class="ld" style="background:#ffdd00"></div> Good (-61~-67)</div>
+    <div class="lr"><div class="ld" style="background:#ff9900"></div> Fair (-68~-70)</div>
+    <div class="lr"><div class="ld" style="background:#ff4444"></div> Weak (-71~-80)</div>
+    <div class="lr"><div class="ld" style="background:#cc0000"></div> Very Poor (&lt;-80)</div>
+    <div style="margin-top:4px;border-top:1px solid rgba(100,100,255,0.15);padding-top:4px;">
+      <div class="lr"><div class="ld" style="background:rgba(255,0,0,0.6);border-radius:50%"></div> Pulsing = Dead Zone</div>
+      <div class="lr"><div class="ld" style="background:#555;border-radius:2px"></div> Gray = No WiFi data</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div id="controls">
+    <button class="cb active" onclick="setView('signal')" id="vSignal">📶 Signal</button>
+    <button class="cb" onclick="setView('users')" id="vUsers">👥 Density</button>
+    <button class="cb" onclick="setView('data')" id="vData">📊 Data</button>
+    <button class="cb" onclick="toggleExplode()" id="bExplode">🏗️ Explode</button>
+    <button class="cb" onclick="toggleLabels()" id="bLabels">🏷️ Labels</button>
+    <button class="cb" onclick="resetCam()">🔄 Reset</button>
+  </div>
+
+  <div id="minimap"><canvas></canvas></div>
+</div>
+
+<!-- Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+// ============================================================
+// CAMPUS DATA - All buildings from KMUTNB map
+// ============================================================
+// WiFi-monitored buildings (with full data)
+const WIFI_BUILDINGS = [
+  {
+    code:'B77', name:'อาคาร 40 ปี มจพ.\nและโรงอาหารกลาง', en:'40th Anniv. & Canteen',
+    pos:[0,0,0], sz:[14,1,8], sess:82875, users:7318, gb:2126.6, rssi:-74.1, weak:74.6, zero:13.0,
+    floors:[
+      {f:'FL1',n:1,rssi:-71.1,snr:13.3,weak:72.3,poor:61.2,users:6174,aps:3,gb:504.1,sess:33919},
+      {f:'FL2',n:2,rssi:-76.5,snr:13.3,weak:75.7,poor:58.9,users:5701,aps:5,gb:660.7,sess:30878},
+      {f:'FL3',n:3,rssi:-75.6,snr:13.2,weak:79.0,poor:54.4,users:1779,aps:2,gb:80.0,sess:3572},
+      {f:'FL4',n:4,rssi:-75.1,snr:12.8,weak:76.0,poor:59.4,users:2877,aps:2,gb:318.1,sess:6292},
+      {f:'FL5',n:5,rssi:-66.1,snr:14.1,weak:46.7,poor:6.6,users:61,aps:1,gb:15.4,sess:167},
+      {f:'FL6',n:6,rssi:-77.2,snr:15.2,weak:81.5,poor:52.6,users:1110,aps:2,gb:306.8,sess:4058},
+      {f:'FL7',n:7,rssi:-76.4,snr:15.7,weak:75.1,poor:56.3,users:1052,aps:1,gb:241.6,sess:3914},
+    ]
+  },
+  {
+    code:'B25', name:'อาคารอเนกประสงค์', en:'Multipurpose Bldg.',
+    pos:[-22,0,-10], sz:[8,1,8], sess:62470, users:6420, gb:4909.6, rssi:-75.5, weak:72.5, zero:6.7,
+    floors:[
+      {f:'FL1',n:1,rssi:-73.7,snr:15.5,weak:75.5,poor:59.7,users:4723,aps:4,gb:155.0,sess:19624},
+      {f:'FL2',n:2,rssi:-73.3,snr:15.5,weak:72.4,poor:55.3,users:2463,aps:6,gb:353.3,sess:7444},
+      {f:'FL3',n:3,rssi:-78.1,snr:15.5,weak:70.1,poor:59.9,users:3496,aps:3,gb:1903.0,sess:11494},
+      {f:'FL4',n:4,rssi:-72.4,snr:15.5,weak:57.5,poor:45.9,users:1054,aps:3,gb:455.4,sess:2437},
+      {f:'FL5',n:5,rssi:-75.4,snr:15.7,weak:72.0,poor:56.3,users:1746,aps:6,gb:455.7,sess:5313},
+      {f:'FL6',n:6,rssi:-72.7,snr:18.0,weak:59.2,poor:38.8,users:531,aps:4,gb:536.5,sess:1028},
+      {f:'FL9',n:9,rssi:-81.2,snr:12.0,weak:85.0,poor:71.9,users:2819,aps:4,gb:498.3,sess:9507},
+      {f:'FL10',n:10,rssi:-71.6,snr:15.8,weak:53.0,poor:38.8,users:528,aps:5,gb:552.5,sess:1623},
+    ]
+  },
+  {
+    code:'B23/B26', name:'อาคารนวมินทรราชินี', en:'Navamindrarachinee Bldg.',
+    pos:[-10,0,14], sz:[10,1,7], sess:20276, users:3674, gb:3256.6, rssi:-69.3, weak:63.8, zero:6.5,
+    floors:[
+      {f:'FL1',n:1,rssi:-74.3,snr:13.5,weak:81.3,poor:59.9,users:1810,aps:4,gb:188.5,sess:5356},
+      {f:'FL3',n:3,rssi:-80.4,snr:14.8,weak:82.1,poor:63.0,users:109,aps:1,gb:266.3,sess:868},
+      {f:'FL4',n:4,rssi:-77.0,snr:18.2,weak:73.2,poor:40.1,users:114,aps:1,gb:320.4,sess:751},
+      {f:'FL5',n:5,rssi:-75.7,snr:19.9,weak:63.6,poor:43.6,users:80,aps:1,gb:125.0,sess:291},
+      {f:'FL6',n:6,rssi:-77.5,snr:18.0,weak:64.1,poor:46.2,users:23,aps:1,gb:78.4,sess:195},
+      {f:'FL7',n:7,rssi:-76.8,snr:18.1,weak:78.9,poor:38.5,users:203,aps:1,gb:304.3,sess:849},
+      {f:'FL10',n:10,rssi:-62.7,snr:30.0,weak:51.5,poor:35.0,users:1157,aps:4,gb:646.6,sess:2760},
+      {f:'FL11',n:11,rssi:-65.8,snr:28.0,weak:53.6,poor:41.1,users:2024,aps:7,gb:1327.2,sess:9206},
+    ]
+  },
+  {
+    code:'B46', name:'คณะศิลปศาสตร์ประยุกต์\nและโรงอาหาร', en:'Applied Arts & Cafe',
+    pos:[18,0,10], sz:[9,1,7], sess:11501, users:2941, gb:884.8, rssi:-66.8, weak:48.5, zero:4.2,
+    floors:[
+      {f:'FL2',n:2,rssi:-69.5,snr:20.0,weak:57.9,poor:34.4,users:475,aps:3,gb:76.6,sess:1160},
+      {f:'FL3',n:3,rssi:-66.6,snr:22.0,weak:47.5,poor:8.7,users:2256,aps:7,gb:417.6,sess:6855},
+      {f:'FL4',n:4,rssi:-70.6,snr:18.0,weak:62.3,poor:34.4,users:1053,aps:9,gb:274.9,sess:3088},
+      {f:'FL5',n:5,rssi:-60.4,snr:25.0,weak:28.5,poor:5.0,users:412,aps:2,gb:115.6,sess:398},
+    ]
+  },
+  {
+    code:'B67', name:'วิทยาลัยเทคโนโลยี\nอุตสาหกรรม', en:'College of Ind. Tech.',
+    pos:[20,0,-8], sz:[10,1,8], sess:6957, users:1771, gb:597.7, rssi:-70.6, weak:62.6, zero:4.3,
+    floors:[
+      {f:'FL1',n:1,rssi:-69.9,snr:20.0,weak:64.3,poor:36.3,users:857,aps:4,gb:190.2,sess:2928},
+      {f:'FL2',n:2,rssi:-61.6,snr:25.0,weak:38.3,poor:17.8,users:230,aps:4,gb:83.3,sess:303},
+      {f:'FL3',n:3,rssi:-76.0,snr:16.7,weak:74.2,poor:56.5,users:1189,aps:5,gb:324.2,sess:3053},
+    ]
+  },
+  {
+    code:'B79', name:'สโมสรบุคลากร มจพ.', en:'Staff Club',
+    pos:[-26,0,6], sz:[6,1,5], sess:5366, users:1957, gb:1058.7, rssi:-72.7, weak:61.1, zero:3.6,
+    floors:[
+      {f:'FLINN',n:1,rssi:-72.7,snr:18.0,weak:61.1,poor:45.9,users:1957,aps:2,gb:1058.7,sess:5366},
+    ]
+  }
+];
+
+// Other campus buildings (no WiFi data - shown as gray context)
+const OTHER_BUILDINGS = [
+  // From KMUTNB campus map - approximate positions
+  {code:'B52',en:'Sirindhorn Intl.',pos:[-6,0,22],sz:[8,1,6],fl:4,color:0x3a3a4a},
+  {code:'B63',en:"President's Office",pos:[8,0,18],sz:[7,1,5],fl:3,color:0x3a3a4a},
+  {code:'B64',en:'Navamindra Annex',pos:[-2,0,8],sz:[6,1,5],fl:5,color:0x3a3a4a},
+  {code:'B65',en:'CIT Annex',pos:[14,0,-2],sz:[6,1,6],fl:4,color:0x3a3a4a},
+  {code:'B72',en:'Technical Education',pos:[10,0,4],sz:[7,1,5],fl:3,color:0x3a3a4a},
+  {code:'B73',en:'ITED Building',pos:[24,0,4],sz:[6,1,5],fl:3,color:0x3a3a4a},
+  {code:'B81',en:'Engineering Faculty',pos:[-16,0,18],sz:[9,1,7],fl:5,color:0x3a3a4a},
+  {code:'B82',en:'Thai-German School',pos:[6,0,-12],sz:[7,1,5],fl:3,color:0x3a3a4a},
+  {code:'B84',en:'Central Library',pos:[-12,0,3],sz:[7,1,6],fl:4,color:0x3a3a4a},
+  {code:'B86',en:'Sports Science',pos:[-30,0,-6],sz:[5,1,4],fl:2,color:0x3a3a4a},
+  {code:'B88',en:'Business Faculty',pos:[28,0,-4],sz:[6,1,5],fl:4,color:0x3a3a4a},
+  {code:'B40',en:'IT Center',pos:[-4,0,-8],sz:[6,1,5],fl:3,color:0x3a3a4a},
+  {code:'B41',en:'Applied Science',pos:[4,0,-6],sz:[6,1,5],fl:4,color:0x3a3a4a},
+  {code:'B44',en:'KMUTNB Dormitory',pos:[-18,0,-18],sz:[8,1,5],fl:3,color:0x3a3a4a},
+  {code:'B47',en:'KMUTNB Learning',pos:[-8,0,-16],sz:[6,1,5],fl:3,color:0x3a3a4a},
+  {code:'B11',en:'Gate Building',pos:[-30,0,-16],sz:[4,1,3],fl:1,color:0x3a3a4a},
+  {code:'B13',en:'Economy Faculty',pos:[-26,0,-14],sz:[5,1,5],fl:3,color:0x3a3a4a},
+  {code:'B91',en:'Stadium Complex',pos:[-6,0,-22],sz:[12,1,8],fl:1,color:0x2a3a2a},
+  {code:'B78',en:'Health Center',pos:[-20,0,2],sz:[5,1,4],fl:2,color:0x3a3a4a},
+  {code:'B96',en:'Canteen 2',pos:[14,0,16],sz:[5,1,4],fl:1,color:0x3a3a4a},
+];
+
+const SUMMARY = {
+  sess:189445, users:8546, aps:107, gb:12834.1, rssi:-73.4, snr:16.2, weak:70.4
+};
+
+// ============================================================
+// INSIGHTS DATA
+// ============================================================
+const INSIGHTS = [
+  {id:1,cat:'signal',icon:'📶',title:'Signal Quality Overview',
+   finding:'70.4% of all sessions have Weak or Very Poor RSSI signal. The campus-wide average is -73.4 dBm, below the "Fair" threshold of -70 dBm. อาคาร 40 ปี (B77) is worst with 74.6% weak sessions.',
+   solution:'Deploy additional APs in all buildings with >60% weak signal. Perform site survey with Ekahau AI Pro. Target 25-30 dBm SNR minimum.',
+   severity:'critical'},
+  {id:2,cat:'signal',icon:'🏚️',title:'Dead Zone Detection',
+   finding:'B25 FL9 has 85% weak sessions (RSSI -81.2 dBm) — worst floor on campus. B77 FL6 at 81.5% weak, B23 FL3 at 82.1% weak. These are critical dead zones.',
+   solution:'Install signal repeaters/mesh APs on dead zone floors. B25 FL9 needs at least 4 additional APs. Use directional antennas for long corridors.',
+   severity:'critical'},
+  {id:3,cat:'capacity',icon:'👥',title:'AP Overload Crisis',
+   finding:'31 APs are overloaded (>100 peak users + poor signal). B77-F2-AP03 peaks at 1,032 concurrent users. Recommended max is 50 users per AP.',
+   solution:'Split overloaded APs: 1 AP per 50 users maximum. B77 FL2 needs at least 20 APs (currently has 5). Implement client load balancing.',
+   severity:'critical'},
+  {id:4,cat:'capacity',icon:'💀',title:'Zero-Data Sessions',
+   finding:'7.3% of sessions transfer zero bytes (13,849 sessions). B77 worst at 13%. These are complete connection failures — users connect but get no data.',
+   solution:'Check DHCP pool exhaustion in B77. Increase DHCP lease pool. Monitor DNS resolution failures. Update AP firmware.',
+   severity:'critical'},
+  {id:5,cat:'anomaly',icon:'⬆️',title:'Upload/Download Ratio Anomaly',
+   finding:'Upload (11,314 GB) is 13.6x higher than Download (830 GB). This is extremely abnormal — normal ratio is 1:3 (DL > UL). B46 worst at 21.7x.',
+   solution:'⚠️ URGENT: Investigate for malware/botnets uploading data. Check for misconfigured monitoring systems. Implement traffic shaping and upload rate limiting. Deep packet inspection recommended.',
+   severity:'critical'},
+  {id:6,cat:'mobility',icon:'🔄',title:'Massive Roaming Problem',
+   finding:'71.5% of users connect to >3 different APs. 78.2% visit multiple buildings. Top user connected to 68 different APs across all 6 buildings. This suggests constant handoff disruptions.',
+   solution:'Enable 802.11r (Fast BSS Transition), 802.11k (Radio Resource Measurement), 802.11v (BSS Transition Management). Configure proper handoff RSSI thresholds at -67 dBm.',
+   severity:'high'},
+  {id:7,cat:'signal',icon:'📡',title:'Channel Congestion',
+   finding:'25 WiFi channels in use. Channel 132 is most loaded (23,417 sessions). 5GHz carries 92% of traffic (174,369 sessions) but has worse RSSI (-72.7) than 2.4GHz (-70.1).',
+   solution:'Implement Dynamic Channel Assignment (DCA). Reduce 5GHz channel width from 80MHz to 40MHz in congested areas. Enable automatic channel optimization.',
+   severity:'high'},
+  {id:8,cat:'time',icon:'⏰',title:'Peak Hour Degradation',
+   finding:'Peak load at 12:00 noon (24,360 sessions) with 69.3% weak signal. Signal degrades -2.3 dBm from weekend to weekday at peak. Building B77 handles 82,875 sessions — 43.7% of all campus traffic.',
+   solution:'Deploy temporary/portable APs during peak hours (11:00-14:00). Implement time-based QoS policies. Add 5G cellular offloading for overflow.',
+   severity:'high'},
+  {id:9,cat:'tech',icon:'📱',title:'Device Ecosystem Issues',
+   finding:'Smartphones dominate at 58.2% but have highest failure rate (10%). 33.5% devices are "Unknown" type. Laptops have best experience (2.8% fail). Tablets at 8.8% failure.',
+   solution:'Optimize AP beacon intervals for smartphone density. Enable DTIM optimization. Create device-specific QoS profiles. Identify "Unknown" devices for security audit.',
+   severity:'medium'},
+  {id:10,cat:'tech',icon:'📻',title:'WiFi Radio Mix Impact',
+   finding:'WiFi 6 (802.11ax) is 74.7% of traffic but has 10% failure rate. Older 802.11n has only 3.4% failure. WiFi 6 efficiency is hampered by overcrowding, not technology.',
+   solution:'WiFi 6 actually works — the issue is capacity. Add more WiFi 6E APs to reduce congestion. Keep WiFi 6 but add more access points.',
+   severity:'medium'},
+  {id:11,cat:'users',icon:'🎓',title:'Student vs Staff Experience',
+   finding:'Students: 151,732 sessions, 9.9% failure, RSSI -74.0 dBm. Staff: 31,816 sessions, 5.3% failure, RSSI -70.8 dBm. Students experience 1.9x more failures.',
+   solution:'Implement role-based QoS: ensure minimum bandwidth for students. Deploy extra APs in student-heavy areas (classrooms, canteen). Consider separate SSID for critical staff use.',
+   severity:'medium'},
+  {id:12,cat:'signal',icon:'🔥',title:'B77 Canteen Nightmare',
+   finding:'Building 77 (Canteen + 40th Anniversary) is the worst performer: 82,875 sessions with only 16 APs. That is 5,180 sessions per AP. Peak: 1,032 users on single AP. 13% zero-data connections.',
+   solution:'PRIORITY #1: B77 needs complete WiFi overhaul. Add 40+ APs (currently 16). Deploy high-density APs like Cisco 9136 or Aruba 650. Install ceiling-mounted APs every 15m.',
+   severity:'critical'},
+  {id:13,cat:'capacity',icon:'📊',title:'Data Hotspot: B25 FL3',
+   finding:'B25-FL3-AP03 transfers a staggering 1,903 GB in one month — the highest in the campus. This single AP handles more data than entire buildings. RSSI is -82.4 (very poor).',
+   solution:'Urgent: Split B25 FL3 into at least 6 APs. Install dedicated high-throughput AP (WiFi 6E) for the data-intensive area. Check if there is a server/lab on this floor.',
+   severity:'critical'},
+  {id:14,cat:'anomaly',icon:'⚡',title:'Failed Session APs',
+   finding:'19 APs have >10% failure rate. B26-F10-AP02 leads at 26.3% failure despite good RSSI (-51.7 dBm!). B77-F3-AP02 at 23% fail. Good signal + high failure = infrastructure problem, not coverage.',
+   solution:'B26-F10-AP02: Good signal but failing — check DHCP, DNS, authentication server capacity. Likely switch port or controller issue. Firmware update or AP replacement needed.',
+   severity:'critical'},
+  {id:15,cat:'users',icon:'🏃',title:'Power User Impact',
+   finding:'Top user connects to 68 APs across all 6 buildings in 1 month. Top 10 roaming users average 53 APs each. Each roaming event can cause 2-5 second disconnection.',
+   solution:'For heavy roamers: enable PMK caching, Opportunistic Key Caching (OKC). Pre-authenticate to neighboring APs. Consider Passpoint/Hotspot 2.0 for seamless transitions.',
+   severity:'medium'},
+];
+
+const PAIN_POINTS = [
+  {icon:'🔴',title:'Campus-wide Poor Signal Coverage',desc:'70.4% sessions have weak signal. Only 2 out of 6 buildings have acceptable signal quality.',fix:'Deploy 80+ new APs, conduct Ekahau site survey, install directional antennas'},
+  {icon:'🔴',title:'B77 Critical Overload',desc:'82,875 sessions on 16 APs. Single AP handling 1,032 concurrent users. 13% zero-data failures.',fix:'Complete WiFi redesign: add 40+ high-density APs, upgrade to WiFi 6E standard'},
+  {icon:'🔴',title:'Abnormal Upload Traffic (13.6x)',desc:'Upload >> Download across ALL buildings. Not a single building has normal ratio. Suggests systemic issue.',fix:'Security audit ASAP. Deploy IDS/IPS. Implement traffic analysis with NetFlow/sFlow'},
+  {icon:'🔴',title:'9.1% Session Failures Campus-wide',desc:'17,278 failed sessions. 19 APs with >10% failure. Some fail despite good RSSI — infrastructure issues.',fix:'Upgrade DHCP servers, fix DNS resolution, update AP firmware, replace failing hardware'},
+  {icon:'🟡',title:'Roaming Disruptions (71.5% roamers)',desc:'78.2% multi-building users. No fast roaming protocols enabled. Users experience disconnections while moving.',fix:'Enable 802.11r/k/v protocols. Deploy controller-based seamless roaming across campus'},
+  {icon:'🟡',title:'Peak Hour Capacity Insufficient',desc:'Noon peak: 24,360 sessions/hour with 69.3% weak signal. Infrastructure designed for one-third of actual load.',fix:'Add portable APs for peaks. Time-based QoS. 5G cellular offload for overflow traffic'},
+];
+
+// ============================================================
+// THREE.JS SETUP
+// ============================================================
+let scene,camera,renderer,controls,raycaster,mouse,clock;
+let floorMeshes=[],deadZones=[],labelSprites=[],allGroups=[];
+let currentView='signal',isExploded=false,showLabels=true;
+let hoveredFloor=null,particleSystem;
+
+function init(){
+  scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x080818);
+  scene.fog=new THREE.FogExp2(0x080818,0.004);
+
+  camera=new THREE.PerspectiveCamera(45,window.innerWidth/window.innerHeight,0.1,500);
+  camera.position.set(50,40,50);
+
+  renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(window.innerWidth,window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.shadowMap.enabled=true;
+  renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure=1.1;
+  document.getElementById('container').appendChild(renderer.domElement);
+
+  controls=new THREE.OrbitControls(camera,renderer.domElement);
+  controls.enableDamping=true;controls.dampingFactor=0.06;
+  controls.maxPolarAngle=Math.PI/2.15;controls.minDistance=12;controls.maxDistance=120;
+  controls.target.set(0,5,0);
+
+  raycaster=new THREE.Raycaster();mouse=new THREE.Vector2();clock=new THREE.Clock();
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0x404070,0.5));
+  const dl=new THREE.DirectionalLight(0xffffff,0.7);
+  dl.position.set(30,50,20);dl.castShadow=true;
+  dl.shadow.mapSize.width=2048;dl.shadow.mapSize.height=2048;
+  dl.shadow.camera.near=1;dl.shadow.camera.far=120;
+  dl.shadow.camera.left=-60;dl.shadow.camera.right=60;
+  dl.shadow.camera.top=60;dl.shadow.camera.bottom=-60;
+  scene.add(dl);
+  scene.add(new THREE.PointLight(0x5555ff,0.3,80).translateX(-25).translateY(20));
+  scene.add(new THREE.PointLight(0xff5555,0.2,80).translateX(25).translateY(15).translateZ(10));
+
+  // Ground
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(140,100),new THREE.MeshStandardMaterial({color:0x141a14,roughness:0.95}));
+  ground.rotation.x=-Math.PI/2;ground.position.y=-0.1;ground.receiveShadow=true;scene.add(ground);
+  scene.add(new THREE.GridHelper(140,70,0x1a1a33,0x0f0f22));
+
+  // Roads
+  const rm=new THREE.MeshStandardMaterial({color:0x2a2a35,roughness:0.85});
+  [[-50,0.02,-22,100,2.5],[50,0.02,0,2.5,60],[-35,0.02,0,2.5,50],[0,0.02,-22,2.5,10],[0,0.02,25,50,2]].forEach(([x,y,z,w,h])=>{
+    const r=new THREE.Mesh(new THREE.PlaneGeometry(w,h),rm);r.rotation.x=-Math.PI/2;r.position.set(x,y,z);scene.add(r);
+  });
+
+  // Trees
+  const tl=new THREE.MeshStandardMaterial({color:0x1a5a1a,transparent:true,opacity:0.75});
+  const tt=new THREE.MeshStandardMaterial({color:0x4a3a2a});
+  [[-18,-20],[-12,-20],[8,-18],[24,-18],[-34,-10],[-34,8],[32,8],[32,-8],[-8,26],[6,26],[20,20],[-20,14],[30,14],[-14,-6],[12,-14]].forEach(([x,z])=>{
+    const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.18,1.2,6),tt);trunk.position.set(x,0.6,z);scene.add(trunk);
+    const leaf=new THREE.Mesh(new THREE.SphereGeometry(0.7,7,5),tl);leaf.position.set(x,1.8,z);scene.add(leaf);
+  });
+
+  buildWiFiBuildings();
+  buildOtherBuildings();
+  createParticles();
+  buildUI();
+
+  window.addEventListener('resize',onResize);
+  renderer.domElement.addEventListener('mousemove',onMouseMove);
+  renderer.domElement.addEventListener('click',onMouseClick);
+}
+
+function rssiColor(r){
+  if(r>=-50)return new THREE.Color(0x00ff88);if(r>=-60)return new THREE.Color(0x44cc44);
+  if(r>=-67)return new THREE.Color(0xffdd00);if(r>=-70)return new THREE.Color(0xff9900);
+  if(r>=-80)return new THREE.Color(0xff4444);return new THREE.Color(0xcc0000);
+}
+
+function buildWiFiBuildings(){
+  const fH=1.3,gap=0.06;
+  WIFI_BUILDINGS.forEach((b,bi)=>{
+    const g=new THREE.Group();g.position.set(b.pos[0],0,b.pos[2]);
+    g.userData={building:b,index:bi,isWifi:true};
+
+    // Foundation
+    const base=new THREE.Mesh(new THREE.BoxGeometry(b.sz[0]+0.5,0.25,b.sz[2]+0.5),
+      new THREE.MeshStandardMaterial({color:0x2a2a3a,roughness:0.7}));
+    base.position.y=0.125;base.receiveShadow=true;g.add(base);
+
+    // Glow ring under building
+    const ring=new THREE.Mesh(new THREE.RingGeometry(Math.max(b.sz[0],b.sz[2])*0.6,Math.max(b.sz[0],b.sz[2])*0.7,32),
+      new THREE.MeshBasicMaterial({color:rssiColor(b.rssi),transparent:true,opacity:0.15,side:THREE.DoubleSide}));
+    ring.rotation.x=-Math.PI/2;ring.position.y=0.01;g.add(ring);
+
+    b.floors.forEach((fl,fi)=>{
+      const y=0.25+fi*(fH+gap);
+      const c=rssiColor(fl.rssi);
+      const mat=new THREE.MeshStandardMaterial({color:c,transparent:true,opacity:0.82,roughness:0.35,metalness:0.1});
+      const geo=new THREE.BoxGeometry(b.sz[0],fH,b.sz[2]);
+      const mesh=new THREE.Mesh(geo,mat);
+      mesh.position.y=y+fH/2;mesh.castShadow=true;mesh.receiveShadow=true;
+      mesh.userData={building:b,floor:fl,bi:bi,fi:fi,origY:y+fH/2,type:'floor'};
+      g.add(mesh);floorMeshes.push(mesh);
+
+      // Edge wireframe
+      const edges=new THREE.LineSegments(new THREE.EdgesGeometry(geo),
+        new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.12}));
+      edges.position.copy(mesh.position);g.add(edges);
+
+      // Dead zone sphere
+      if(fl.weak>70){
+        const sz=0.3+fl.weak/200;
+        const sp=new THREE.Mesh(new THREE.SphereGeometry(sz,12,12),
+          new THREE.MeshBasicMaterial({color:0xff0000,transparent:true,opacity:0.45}));
+        sp.position.set(b.sz[0]/2+1,y+fH/2,0);sp.userData={type:'deadzone',floor:fl,building:b};
+        g.add(sp);deadZones.push(sp);
+      }
+
+      // Floor label
+      const lbl=makeLabel(fl.f,0.3);lbl.position.set(-b.sz[0]/2-0.7,y+fH/2,0);
+      lbl.userData={type:'label'};g.add(lbl);labelSprites.push(lbl);
+    });
+
+    // Building top label
+    const topY=0.25+b.floors.length*(fH+gap)+0.8;
+    const nl=makeLabel(b.code+'\n'+b.en,0.6);nl.position.set(0,topY,0);
+    nl.userData={type:'label'};g.add(nl);labelSprites.push(nl);
+
+    scene.add(g);allGroups.push(g);
+  });
+}
+
+function buildOtherBuildings(){
+  const fH=1.2;
+  OTHER_BUILDINGS.forEach(b=>{
+    const g=new THREE.Group();g.position.set(b.pos[0],0,b.pos[2]);
+    g.userData={isWifi:false,code:b.code};
+
+    for(let i=0;i<b.fl;i++){
+      const y=0.1+i*(fH+0.05);
+      const mat=new THREE.MeshStandardMaterial({
+        color:b.color||0x3a3a4a,transparent:true,opacity:0.4,roughness:0.6});
+      const mesh=new THREE.Mesh(new THREE.BoxGeometry(b.sz[0],fH,b.sz[2]),mat);
+      mesh.position.y=y+fH/2;mesh.castShadow=true;mesh.receiveShadow=true;
+      g.add(mesh);
+    }
+
+    const lbl=makeLabel(b.code+'\n'+b.en,0.4);
+    lbl.position.y=b.fl*(fH+0.05)+1;
+    lbl.material.opacity=0.5;g.add(lbl);labelSprites.push(lbl);
+
+    scene.add(g);allGroups.push(g);
+  });
+}
+
+function makeLabel(text,scale){
+  const c=document.createElement('canvas');const ctx=c.getContext('2d');
+  const lines=text.split('\n');
+  c.width=256;c.height=48*Math.max(lines.length,1);
+  ctx.font='bold 22px Segoe UI,Tahoma,sans-serif';
+  ctx.textAlign='center';ctx.fillStyle='#fff';ctx.strokeStyle='#000';ctx.lineWidth=3;
+  lines.forEach((l,i)=>{const y=26+i*28;ctx.strokeText(l,128,y);ctx.fillText(l,128,y);});
+  const tex=new THREE.CanvasTexture(c);tex.needsUpdate=true;
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:0.85,depthTest:false}));
+  sp.scale.set(scale*4*(lines.length>1?1.1:1),scale*1.3*lines.length,1);
+  return sp;
+}
+
+// ============================================================
+// PARTICLES
+// ============================================================
+function createParticles(){
+  const N=400;const geo=new THREE.BufferGeometry();
+  const pos=new Float32Array(N*3),col=new Float32Array(N*3),vels=[];
+  for(let i=0;i<N;i++){
+    const bi=Math.floor(Math.random()*WIFI_BUILDINGS.length);const b=WIFI_BUILDINGS[bi];
+    pos[i*3]=b.pos[0]+(Math.random()-0.5)*b.sz[0];
+    pos[i*3+1]=Math.random()*b.floors.length*1.4+0.3;
+    pos[i*3+2]=b.pos[2]+(Math.random()-0.5)*b.sz[2];
+    const cl=rssiColor(b.rssi);col[i*3]=cl.r;col[i*3+1]=cl.g;col[i*3+2]=cl.b;
+    vels.push({y:0.008+Math.random()*0.025,maxY:b.floors.length*1.4+2,bi});
+  }
+  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('color',new THREE.BufferAttribute(col,3));
+  const mat=new THREE.PointsMaterial({size:0.12,vertexColors:true,transparent:true,opacity:0.5,blending:THREE.AdditiveBlending,depthWrite:false});
+  particleSystem=new THREE.Points(geo,mat);particleSystem.userData.vels=vels;scene.add(particleSystem);
+}
+
+function animateParticles(){
+  if(!particleSystem)return;
+  const p=particleSystem.geometry.attributes.position.array;
+  const v=particleSystem.userData.vels;
+  for(let i=0;i<v.length;i++){
+    p[i*3+1]+=v[i].y;
+    if(p[i*3+1]>v[i].maxY){
+      const b=WIFI_BUILDINGS[v[i].bi];
+      p[i*3]=b.pos[0]+(Math.random()-0.5)*b.sz[0];p[i*3+1]=0.3;
+      p[i*3+2]=b.pos[2]+(Math.random()-0.5)*b.sz[2];
+    }
+  }
+  particleSystem.geometry.attributes.position.needsUpdate=true;
+}
+
+// ============================================================
+// VIEWS
+// ============================================================
+function setView(mode){
+  currentView=mode;
+  document.querySelectorAll('#controls .cb').forEach(b=>b.classList.remove('active'));
+  const el=document.getElementById('v'+mode.charAt(0).toUpperCase()+mode.slice(1));
+  if(el)el.classList.add('active');
+  const mxU=Math.max(...WIFI_BUILDINGS.flatMap(b=>b.floors.map(f=>f.users)));
+  const mxG=Math.max(...WIFI_BUILDINGS.flatMap(b=>b.floors.map(f=>f.gb)));
+  floorMeshes.forEach(m=>{
+    const fl=m.userData.floor;let c;
+    if(mode==='signal')c=rssiColor(fl.rssi);
+    else if(mode==='users'){const t=Math.min(fl.users/mxU,1);c=new THREE.Color().setHSL(0.55-t*0.55,0.8,0.3+t*0.35);}
+    else{const t=Math.min(fl.gb/mxG,1);c=new THREE.Color().setHSL(0.55-t*0.55,0.7,0.3+t*0.3);}
+    m.material.color=c;m.material.needsUpdate=true;
+  });
+}
+
+function toggleExplode(){
+  isExploded=!isExploded;document.getElementById('bExplode').classList.toggle('active',isExploded);
+  floorMeshes.forEach(m=>{m.userData.targetY=m.userData.origY+(isExploded?m.userData.fi*1.5:0);});
+}
+
+function toggleLabels(){
+  showLabels=!showLabels;document.getElementById('bLabels').classList.toggle('active',showLabels);
+  labelSprites.forEach(s=>{s.visible=showLabels;});
+}
+
+function resetCam(){camera.position.set(50,40,50);controls.target.set(0,5,0);controls.update();}
+
+// ============================================================
+// TABS & UI
+// ============================================================
+function switchTab(tab){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('panelBuildings').style.display='none';
+  document.getElementById('panelInsights').style.display='none';
+  document.getElementById('panelFloor').style.display='none';
+
+  if(tab==='3d'||tab==='buildings'){
+    document.getElementById('panelBuildings').style.display='block';
+    buildBuildingCards();
+  }else if(tab==='insights'){
+    document.getElementById('panelInsights').style.display='block';
+    buildInsightsPanel(INSIGHTS);
+  }else if(tab==='problems'){
+    document.getElementById('panelInsights').style.display='block';
+    buildProblemsPanel();
+  }else if(tab==='solutions'){
+    document.getElementById('panelInsights').style.display='block';
+    buildSolutionsPanel();
+  }
+}
+
+function buildUI(){
+  // Global stats
+  document.getElementById('globalStats').innerHTML=`
+    <div class="stat-item"><div class="stat-val">${SUMMARY.sess.toLocaleString()}</div><div class="stat-label">Sessions</div></div>
+    <div class="stat-item"><div class="stat-val">${SUMMARY.users.toLocaleString()}</div><div class="stat-label">Users</div></div>
+    <div class="stat-item"><div class="stat-val">${SUMMARY.aps}</div><div class="stat-label">APs</div></div>
+    <div class="stat-item"><div class="stat-val">${SUMMARY.gb.toLocaleString()}</div><div class="stat-label">Total GB</div></div>
+    <div class="stat-item"><div class="stat-val" style="color:#ff6b6b">${SUMMARY.weak}%</div><div class="stat-label">Weak Signal</div></div>
+    <div class="stat-item"><div class="stat-val">${SUMMARY.rssi}</div><div class="stat-label">Avg RSSI</div></div>`;
+  buildBuildingCards();
+}
+
+function buildBuildingCards(){
+  let h='<h3>🏢 WiFi-Monitored Buildings (6)</h3>';
+  WIFI_BUILDINGS.forEach((b,i)=>{
+    const rc=b.rssi>=-67?'#ffdd00':b.rssi>=-80?'#ff4444':'#cc0000';
+    const wc=b.weak>70?'#ff4444':b.weak>50?'#ff9900':'#ffdd00';
+    h+=`<div class="bcard" onclick="focusBldg(${i})" id="bc${i}">
+      <div class="bname">${b.code} — ${b.name.replace(/\n/g,' ')}</div>
+      <div class="bsub">${b.en} | ${b.floors.length} floors</div>
+      <div class="bstats">
+        <span class="bs">👥 ${b.users.toLocaleString()}</span>
+        <span class="bs">📡 ${b.sess.toLocaleString()}</span>
+        <span class="bs">💾 ${b.gb.toLocaleString()} GB</span>
+        <span class="badge" style="background:${rc}22;color:${rc}">📶 ${b.rssi} dBm</span>
+        <span class="badge" style="background:${wc}22;color:${wc}">⚠️ ${b.weak}%</span>
+        ${b.zero>8?`<span class="badge" style="background:#ff000022;color:#ff4444">💀 ${b.zero}% zero</span>`:''}
+      </div></div>`;
+  });
+  h+='<h3 style="margin-top:14px">🏛️ Other Buildings ('+OTHER_BUILDINGS.length+')</h3>';
+  h+='<div style="font-size:10px;color:#666;margin-bottom:6px">No WiFi monitoring data available</div>';
+  OTHER_BUILDINGS.forEach(b=>{
+    h+=`<div class="bcard" style="opacity:0.5;border-left-color:#3a3a4a;cursor:default">
+      <div class="bname" style="color:#888">${b.code} — ${b.en}</div>
+      <div class="bsub">${b.fl} floors | No data</div></div>`;
+  });
+  document.getElementById('panelBuildings').innerHTML=h;
+}
+
+function buildInsightsPanel(items){
+  let h='<h3>💡 Deep Insights ('+items.length+')</h3>';
+  const cats=[...new Set(items.map(x=>x.cat))];
+  h+='<div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">';
+  h+='<button class="cb active" onclick="filterInsights(\'all\',this)" style="padding:3px 8px;font-size:9px">All</button>';
+  const catNames={signal:'Signal',capacity:'Capacity',anomaly:'Anomaly',mobility:'Mobility',time:'Time',tech:'Tech',users:'Users'};
+  cats.forEach(c=>{
+    h+=`<button class="cb" onclick="filterInsights('${c}',this)" style="padding:3px 8px;font-size:9px">${catNames[c]||c}</button>`;
+  });
+  h+='</div><div id="insightList">';
+  items.forEach(ins=>{
+    const sc=ins.severity==='critical'?'#ff4444':ins.severity==='high'?'#ff9900':'#ffdd00';
+    h+=`<div class="insight-card" data-cat="${ins.cat}" style="border-left-color:${sc}">
+      <h4>${ins.icon} #${ins.id}: ${ins.title} <span style="font-size:9px;color:${sc}">[${ins.severity.toUpperCase()}]</span></h4>
+      <div class="finding">${ins.finding}</div>
+      <div class="solution">💡 <strong>Solution:</strong> ${ins.solution}</div></div>`;
+  });
+  h+='</div>';
+  document.getElementById('panelInsights').innerHTML=h;
+}
+
+function filterInsights(cat,btn){
+  document.querySelectorAll('#panelInsights .cb').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.insight-card').forEach(c=>{
+    c.style.display=(cat==='all'||c.dataset.cat===cat)?'block':'none';
+  });
+}
+
+function buildProblemsPanel(){
+  let h='<h3>🔴 Critical Pain Points ('+PAIN_POINTS.length+')</h3>';
+  PAIN_POINTS.forEach((p,i)=>{
+    h+=`<div class="insight-card" style="border-left-color:${p.icon==='🔴'?'#ff4444':'#ff9900'}">
+      <h4>${p.icon} Pain Point #${i+1}: ${p.title}</h4>
+      <div class="finding">${p.desc}</div>
+      <div class="solution">💡 <strong>Fix:</strong> ${p.fix}</div></div>`;
+  });
+  document.getElementById('panelInsights').innerHTML=h;
+}
+
+function buildSolutionsPanel(){
+  let h='<h3>🟢 Recommended Solutions — Prioritized Action Plan</h3>';
+  const solutions=[
+    {pri:'P0',title:'Security Investigation — Upload Anomaly',cost:'$$$',time:'1 week',
+     desc:'Upload/Download ratio of 13.6x is extremely abnormal. Could indicate data exfiltration, malware, or misconfiguration.',
+     actions:['Deploy IDS/IPS (Snort/Suricata)','Run deep packet inspection','Audit all connected devices','Check for rogue APs']},
+    {pri:'P1',title:'B77 Complete WiFi Overhaul',cost:'$$$$',time:'2-4 weeks',
+     desc:'Worst building: 82,875 sessions, 16 APs, 13% zero-data failures. Canteen area is the #1 bottleneck.',
+     actions:['Add 40+ Cisco 9136/Aruba 650 APs','Ceiling-mount every 15m','Deploy high-density mode','Separate 2.4/5GHz SSIDs']},
+    {pri:'P1',title:'Dead Zone Emergency APs',cost:'$$',time:'1 week',
+     desc:'B25 FL9 (85% weak), B77 FL6 (81.5%), B23 FL3 (82.1%) need immediate coverage.',
+     actions:['Install 4 APs per dead zone floor','Use directional antennas for corridors','Deploy mesh extenders','Signal repeaters for elevator areas']},
+    {pri:'P2',title:'Enable Fast Roaming Campus-wide',cost:'$',time:'1-2 weeks',
+     desc:'71.5% users are roamers. 78.2% travel between buildings. No seamless handoff configured.',
+     actions:['Enable 802.11r (Fast BSS Transition)','Enable 802.11k/v','Configure -67 dBm handoff threshold','Deploy PMK caching']},
+    {pri:'P2',title:'Fix Failed Sessions (9.1%)',cost:'$$',time:'2 weeks',
+     desc:'17K+ failed sessions. Some APs fail at 26% despite good RSSI — infrastructure issue.',
+     actions:['Expand DHCP pool (especially B77)','Fix DNS resolution','Update firmware on 19 high-fail APs','Replace B26-F10-AP02 hardware']},
+    {pri:'P3',title:'Peak Hour Capacity Planning',cost:'$$$',time:'1 month',
+     desc:'Noon peak at 24K sessions with 69% weak. System designed for 1/3 of actual load.',
+     actions:['Deploy portable APs for 11-14h peak','Time-based QoS policies','5G cellular offload integration','Bandwidth throttling for non-essential traffic']},
+    {pri:'P3',title:'Long-term: WiFi 6E Campus Upgrade',cost:'$$$$$',time:'6-12 months',
+     desc:'Comprehensive campus-wide upgrade to WiFi 6E with proper site survey and design.',
+     actions:['Ekahau site survey for all buildings','WiFi 6E AP deployment (107→250+ APs)','New controller infrastructure','Implement AI-driven RF management']},
+  ];
+  solutions.forEach((s,i)=>{
+    const pc=s.pri==='P0'?'#ff0000':s.pri==='P1'?'#ff4444':s.pri==='P2'?'#ff9900':'#ffdd00';
+    h+=`<div class="insight-card" style="border-left-color:${pc}">
+      <h4><span style="background:${pc}33;color:${pc};padding:1px 6px;border-radius:3px">${s.pri}</span> ${s.title}
+        <span style="font-size:9px;color:#888">Cost: ${s.cost} | Time: ${s.time}</span></h4>
+      <div class="finding">${s.desc}</div>
+      <div class="solution">${s.actions.map(a=>'✅ '+a).join('<br>')}</div></div>`;
+  });
+  document.getElementById('panelInsights').innerHTML=h;
+}
+
+function focusBldg(idx){
+  const b=WIFI_BUILDINGS[idx];
+  document.querySelectorAll('.bcard').forEach(c=>c.classList.remove('active'));
+  const el=document.getElementById('bc'+idx);if(el)el.classList.add('active');
+
+  // Camera animation
+  const tp=new THREE.Vector3(b.pos[0]+15,b.floors.length*2+8,b.pos[2]+15);
+  const tl=new THREE.Vector3(b.pos[0],b.floors.length*0.7,b.pos[2]);
+  const sp=camera.position.clone(),st=controls.target.clone();
+  let t=0;(function anim(){
+    t+=0.03;if(t>1)t=1;const e=t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+    camera.position.lerpVectors(sp,tp,e);controls.target.lerpVectors(st,tl,e);controls.update();
+    if(t<1)requestAnimationFrame(anim);
+  })();
+
+  showFloorDetail(b);
+}
+
+function showFloorDetail(b){
+  const p=document.getElementById('panelFloor');p.style.display='block';
+  let h=`<h3>📊 ${b.code} — ${b.en}</h3>
+    <div style="font-size:10px;color:#777;margin-bottom:8px">${b.sess.toLocaleString()} sessions | ${b.users.toLocaleString()} users | ${b.gb} GB | ${b.floors.length} floors</div>`;
+
+  [...b.floors].sort((a,c)=>c.n-a.n).forEach(f=>{
+    const c=f.rssi>=-60?'#44cc44':f.rssi>=-67?'#ffdd00':f.rssi>=-70?'#ff9900':f.rssi>=-80?'#ff4444':'#cc0000';
+    const dz=f.weak>70?' 🔴':f.weak>50?' ⚠️':'';
+    h+=`<div class="floor-row" style="border-left-color:${c}">
+      <div class="fn">${f.f}</div>
+      <div style="flex:1;display:flex;gap:5px;flex-wrap:wrap">
+        <span class="fs">📶 ${f.rssi}</span><span class="fs">⚠️ ${f.weak}%</span>
+        <span class="fs">👥 ${f.users.toLocaleString()}</span><span class="fs">📡 ${f.aps}</span>
+        <span class="fs">💾 ${f.gb}GB</span>
+        <span style="color:${f.weak>70?'#ff4444':'#ff9900'};font-weight:600;font-size:10px">${dz}</span>
+      </div></div>`;
+  });
+
+  const wf=[...b.floors].sort((a,c)=>a.rssi-c.rssi)[0];
+  h+=`<div style="margin-top:10px;padding:8px;background:rgba(255,40,40,0.08);border-radius:6px;border-left:3px solid #ff4444">
+    <div style="font-size:10px;font-weight:600;color:#ff6666">🔍 Issues:</div>
+    <div style="font-size:9px;color:#ccc;margin-top:3px;line-height:1.5">
+      • Worst floor: ${wf.f} (${wf.rssi} dBm, ${wf.weak}% weak)<br>
+      • Users/AP ratio: ${Math.round(b.users/b.floors.reduce((s,f)=>s+f.aps,0))}:1 (recommended: 50:1)<br>
+      ${b.zero>5?`• ⚠️ ${b.zero}% zero-byte failures`:''}
+    </div></div>
+  <div style="margin-top:6px;padding:8px;background:rgba(40,200,80,0.08);border-radius:6px;border-left:3px solid #44cc44">
+    <div style="font-size:10px;font-weight:600;color:#44cc44">💡 Actions:</div>
+    <div style="font-size:9px;color:#ccc;margin-top:3px;line-height:1.5">
+      • Add ${Math.ceil(b.floors.filter(f=>f.weak>60).length*2)} APs to weak floors<br>
+      • Enable fast roaming (802.11r/k/v)<br>
+      • Deploy signal repeaters on ${wf.f}<br>
+      • Upgrade to WiFi 6E high-density APs
+    </div></div>`;
+  p.innerHTML=h;
+}
+
+// ============================================================
+// INTERACTION
+// ============================================================
+function onMouseMove(e){
+  mouse.x=(e.clientX/window.innerWidth)*2-1;mouse.y=-(e.clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(mouse,camera);
+  const hits=raycaster.intersectObjects(floorMeshes);
+  const tt=document.getElementById('tooltip');
+
+  if(hoveredFloor&&hoveredFloor.material){hoveredFloor.material.opacity=0.82;hoveredFloor.material.emissive.setHex(0);}
+
+  if(hits.length>0){
+    const m=hits[0].object;if(m.userData.type==='floor'){
+      hoveredFloor=m;m.material.opacity=1.0;m.material.emissive.setHex(0x222244);
+      const f=m.userData.floor,b=m.userData.building;
+      const ql=f.rssi>=-50?'Excellent ✅':f.rssi>=-60?'Very Good 👍':f.rssi>=-67?'Good 👌':f.rssi>=-70?'Fair ⚠️':f.rssi>=-80?'Weak ❌':'Very Poor 🚫';
+      tt.style.display='block';tt.style.left=(e.clientX+12)+'px';tt.style.top=(e.clientY-10)+'px';
+      tt.innerHTML=`<div class="tn">${b.code} — ${f.f}</div>
+        <div class="tr">📶 RSSI: <b>${f.rssi} dBm</b> (${ql})</div>
+        <div class="tr">📊 SNR: ${f.snr} dB</div>
+        <div class="tr">⚠️ Weak: <b style="color:${f.weak>70?'#ff4444':'#ff9900'}">${f.weak}%</b></div>
+        <div class="tr">👥 Users: ${f.users.toLocaleString()}</div>
+        <div class="tr">📡 APs: ${f.aps}</div>
+        <div class="tr">💾 Data: ${f.gb} GB</div>
+        <div class="tr">📱 Sessions: ${f.sess.toLocaleString()}</div>`;
+      document.body.style.cursor='pointer';return;
+    }
+  }
+  tt.style.display='none';document.body.style.cursor='default';hoveredFloor=null;
+}
+
+function onMouseClick(){
+  raycaster.setFromCamera(mouse,camera);
+  const hits=raycaster.intersectObjects(floorMeshes);
+  if(hits.length>0&&hits[0].object.userData.type==='floor')focusBldg(hits[0].object.userData.bi);
+}
+
+function onResize(){
+  camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+}
+
+// ============================================================
+// MINIMAP
+// ============================================================
+function drawMinimap(){
+  const cv=document.querySelector('#minimap canvas');if(!cv)return;
+  const ctx=cv.getContext('2d');cv.width=140;cv.height=100;
+  ctx.fillStyle='#080818';ctx.fillRect(0,0,140,100);
+  const sc=1.8,ox=70,oy=55;
+
+  // Draw other buildings first
+  OTHER_BUILDINGS.forEach(b=>{
+    ctx.fillStyle='rgba(60,60,80,0.4)';
+    ctx.fillRect(ox+b.pos[0]*sc-b.sz[0]*sc/2,oy+b.pos[2]*sc-b.sz[2]*sc/2,b.sz[0]*sc,b.sz[2]*sc);
+  });
+
+  // WiFi buildings
+  WIFI_BUILDINGS.forEach(b=>{
+    const x=ox+b.pos[0]*sc,y=oy+b.pos[2]*sc;
+    const cl=rssiColor(b.rssi);
+    ctx.fillStyle=`rgb(${cl.r*255|0},${cl.g*255|0},${cl.b*255|0})`;
+    ctx.globalAlpha=0.7;
+    ctx.fillRect(x-b.sz[0]*sc/2,y-b.sz[2]*sc/2,b.sz[0]*sc,b.sz[2]*sc);
+    ctx.globalAlpha=1;ctx.strokeStyle='#fff';ctx.lineWidth=0.4;
+    ctx.strokeRect(x-b.sz[0]*sc/2,y-b.sz[2]*sc/2,b.sz[0]*sc,b.sz[2]*sc);
+    ctx.fillStyle='#fff';ctx.font='6px sans-serif';ctx.textAlign='center';
+    ctx.fillText(b.code,x,y+2);
+  });
+
+  // Camera dot
+  const cx=Math.max(4,Math.min(136,ox+camera.position.x*sc*0.25));
+  const cz=Math.max(4,Math.min(96,oy+camera.position.z*sc*0.25));
+  ctx.fillStyle='#60a5fa';ctx.beginPath();ctx.arc(cx,cz,2.5,0,Math.PI*2);ctx.fill();
+}
+
+// ============================================================
+// ANIMATION
+// ============================================================
+function animate(){
+  requestAnimationFrame(animate);const t=clock.getElapsedTime();
+
+  deadZones.forEach((s,i)=>{
+    s.material.opacity=0.25+0.45*Math.sin(t*3+i*1.5);
+    const sc=0.7+0.4*Math.sin(t*2+i);s.scale.set(sc,sc,sc);
+  });
+
+  floorMeshes.forEach(m=>{
+    if(m.userData.targetY!==undefined){
+      const d=m.userData.targetY-m.position.y;if(Math.abs(d)>0.01)m.position.y+=d*0.08;
+    }
+  });
+
+  animateParticles();
+  if(Math.floor(t*60)%30===0)drawMinimap();
+
+  controls.update();renderer.render(scene,camera);
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+init();animate();
+</script>
+</body>
+</html>
